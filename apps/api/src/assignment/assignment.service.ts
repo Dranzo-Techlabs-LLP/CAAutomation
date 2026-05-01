@@ -68,7 +68,7 @@ export class AssignmentService {
     if (strategy === AssignmentStrategy.ServiceDefault && serviceId) {
       const service = await this.serviceRepository.findOne({ where: { firmId, id: serviceId } });
       const nextStrategy = service?.defaultAssigneeStrategy as AssignmentStrategy | undefined;
-      if (nextStrategy && nextStrategy !== AssignmentStrategy.ServiceDefault) {
+      if (service && nextStrategy && nextStrategy !== AssignmentStrategy.ServiceDefault) {
         return this.resolve(
           firmId,
           nextStrategy,

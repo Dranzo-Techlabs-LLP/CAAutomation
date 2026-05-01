@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TBM Practice OS Preview</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f9fb;
+        --panel: #ffffff;
+        --text: #172033;
+        --muted: #667085;
+        --border: #d8e0e8;
+        --primary: #087f5b;
+        --blue: #2563eb;
+        --amber: #d97706;
+        --red: #dc2626;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .layout { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
+      aside { background: var(--panel); border-right: 1px solid var(--border); }
+      .brand { height: 64px; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid var(--border); font-weight: 700; }
+      .shield { width: 22px; height: 22px; border-radius: 6px; background: var(--primary); }
+      nav { padding: 12px; }
+      nav button { width: 100%; border: 0; background: transparent; color: var(--muted); text-align: left; padding: 10px 12px; border-radius: 6px; font-size: 14px; }
+      nav button.active, nav button:hover { background: #edf4f2; color: var(--text); }
+      header { height: 64px; background: rgba(255,255,255,.92); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; }
+      h1, h2, p { margin: 0; }
+      .eyebrow { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+      main section { padding: 24px; display: grid; gap: 20px; }
+      .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+      .metric, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+      .metric label { color: var(--muted); font-size: 12px; }
+      .metric strong { display: block; margin-top: 8px; font-size: 28px; }
+      .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+      .bars { display: grid; gap: 12px; margin-top: 16px; }
+      .bar-row { display: grid; grid-template-columns: 80px 1fr 42px; align-items: center; gap: 10px; font-size: 13px; }
+      .bar-track { height: 12px; border-radius: 999px; background: #e8edf3; overflow: hidden; }
+      .bar { height: 100%; border-radius: 999px; background: var(--blue); }
+      .list { margin-top: 12px; display: grid; gap: 0; }
+      .list div { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding: 13px 0; font-size: 14px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+      th { color: var(--muted); font-size: 12px; text-align: left; padding: 10px 8px; text-transform: uppercase; }
+      td { border-top: 1px solid var(--border); padding: 12px 8px; }
+      .pill { display: inline-flex; border-radius: 4px; background: #edf4f2; padding: 4px 8px; font-size: 12px; }
+      .button { border: 0; background: var(--primary); color: white; border-radius: 6px; min-height: 36px; padding: 0 14px; font-weight: 700; }
+      @media (max-width: 900px) {
+        .layout { display: block; }
+        aside { display: none; }
+        .metrics, .grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside>
+        <div class="brand"><span class="shield"></span>TBM Practice OS</div>
+        <nav>
+          <button class="active">Dashboards</button>
+          <button>Customers</button>
+          <button>Recurrences</button>
+          <button>Compliance Calendar</button>
+          <button>Notifications</button>
+        </nav>
+      </aside>
+      <div>
+        <header>
+          <div>
+            <p class="eyebrow">Partner workspace</p>
+            <h1>Practice command center</h1>
+          </div>
+          <button class="button">Create recurrence</button>
+        </header>
+        <main>
+          <section>
+            <div class="metrics">
+              <div class="metric"><label>Revenue</label><strong>₹18.4L</strong></div>
+              <div class="metric"><label>WIP Tasks</label><strong>126</strong></div>
+              <div class="metric"><label>SLA Breaches</label><strong>9</strong></div>
+              <div class="metric"><label>Utilization</label><strong>78%</strong></div>
+            </div>
+            <div class="grid">
+              <div class="panel">
+                <h2>Team workload</h2>
+                <div class="bars">
+                  <div class="bar-row"><span>GST</span><span class="bar-track"><span class="bar" style="width: 84%"></span></span><strong>42</strong></div>
+                  <div class="bar-row"><span>Audit</span><span class="bar-track"><span class="bar" style="width: 50%"></span></span><strong>25</strong></div>
+                  <div class="bar-row"><span>ITR</span><span class="bar-track"><span class="bar" style="width: 72%"></span></span><strong>36</strong></div>
+                  <div class="bar-row"><span>ROC</span><span class="bar-track"><span class="bar" style="width: 36%"></span></span><strong>18</strong></div>
+                </div>
+              </div>
+              <div class="panel">
+                <h2>Today</h2>
+                <div class="list">
+                  <div><span>GSTR-3B review queue</span><span class="pill">Open</span></div>
+                  <div><span>ITR senior approval</span><span class="pill">Review</span></div>
+                  <div><span>ROC AOC-4 evidence pending</span><span class="pill">Due</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="panel">
+              <h2>Recurrences</h2>
+              <table>
+                <thead><tr><th>Name</th><th>Customer</th><th>Service</th><th>Next run</th><th>Strategy</th><th>Status</th></tr></thead>
+                <tbody>
+                  <tr><td>GSTR-3B Monthly</td><td>Demo Client 1</td><td>GST</td><td>2026-05-20</td><td>team_least_loaded</td><td><span class="pill">Active</span></td></tr>
+                  <tr><td>TDS Payment</td><td>Demo Client 2</td><td>TDS</td><td>2026-05-21</td><td>customer_owner</td><td><span class="pill">Active</span></td></tr>
+                  <tr><td>PF & ESI Monthly</td><td>Demo Client 3</td><td>Payroll</td><td>2026-05-22</td><td>team_round_robin</td><td><span class="pill">Active</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>
