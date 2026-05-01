@@ -8,6 +8,8 @@ import { Firm } from '../common/entities/firm.entity';
 import { Customer } from '../customers/customer.entity';
 import { Enquiry } from '../enquiries/enquiry.entity';
 import { Permission } from '../permissions/permission.entity';
+import { RecurrenceRunLog } from '../recurrences/recurrence-run-log.entity';
+import { TaskRecurrence } from '../recurrences/task-recurrence.entity';
 import { RolePermission } from '../roles/role-permission.entity';
 import { Role } from '../roles/role.entity';
 import { ServiceCatalog } from '../services-catalog/service-catalog.entity';
@@ -52,6 +54,8 @@ export const AppDataSource = new DataSource({
     WorkflowStep,
     WorkflowStepTransition,
     TaskStepHistory,
+    TaskRecurrence,
+    RecurrenceRunLog,
   ],
   migrations: ['src/database/migrations/*.ts'],
   synchronize: false,

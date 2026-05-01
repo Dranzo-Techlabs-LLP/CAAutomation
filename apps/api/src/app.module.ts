@@ -1,6 +1,8 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AssignmentModule } from './assignment/assignment.module';
 import { AuthModule } from './auth/auth.module';
 import { PasswordResetToken } from './auth/password-reset-token.entity';
 import { RefreshToken } from './auth/refresh-token.entity';
@@ -18,6 +20,10 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { RolePermission } from './roles/role-permission.entity';
 import { Role } from './roles/role.entity';
 import { RolesModule } from './roles/roles.module';
+import { RecurrenceRunLog } from './recurrences/recurrence-run-log.entity';
+import { RecurrencesModule } from './recurrences/recurrences.module';
+import { TaskRecurrence } from './recurrences/task-recurrence.entity';
+import { SchedulerModule } from './scheduler/scheduler.module';
 import { ServiceCatalog } from './services-catalog/service-catalog.entity';
 import { ServicesCatalogModule } from './services-catalog/services-catalog.module';
 import { TaskComment } from './task-comments/task-comment.entity';
@@ -73,10 +79,22 @@ import { WorkflowsModule } from './workflows/workflows.module';
           WorkflowStep,
           WorkflowStepTransition,
           TaskStepHistory,
+          TaskRecurrence,
+          RecurrenceRunLog,
         ],
         synchronize: false,
         autoLoadEntities: false,
         logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : ['error'],
+      }),
+    }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST') ?? 'localhost',
+          port: Number(config.get<string>('REDIS_PORT') ?? 6379),
+          password: config.get<string>('REDIS_PASSWORD') || undefined,
+        },
       }),
     }),
     AuthModule,
@@ -93,6 +111,9 @@ import { WorkflowsModule } from './workflows/workflows.module';
     AttachmentsModule,
     TimeLogsModule,
     WorkflowsModule,
+    AssignmentModule,
+    RecurrencesModule,
+    SchedulerModule,
   ],
 })
 export class AppModule {}
