@@ -16,6 +16,7 @@ import { Firm } from './common/entities/firm.entity';
 import { validateEnv } from './config/env.validation';
 import { Customer } from './customers/customer.entity';
 import { CustomersModule } from './customers/customers.module';
+import { DashboardsModule } from './dashboards/dashboards.module';
 import { EnquiriesModule } from './enquiries/enquiries.module';
 import { Enquiry } from './enquiries/enquiry.entity';
 import { HealthModule } from './health/health.module';
@@ -122,6 +123,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     RecurrencesModule,
     SchedulerModule,
     BillingModule,
+    DashboardsModule,
   ],
 })
 export class AppModule {}
