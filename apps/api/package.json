@@ -10,7 +10,8 @@
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "test": "jest --runInBand",
     "migration:run": "typeorm-ts-node-commonjs -d src/database/data-source.ts migration:run",
-    "migration:revert": "typeorm-ts-node-commonjs -d src/database/data-source.ts migration:revert"
+    "migration:revert": "typeorm-ts-node-commonjs -d src/database/data-source.ts migration:revert",
+    "seed": "ts-node -r tsconfig-paths/register src/database/seed.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^10.2.3",
