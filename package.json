@@ -1,0 +1,20 @@
+{
+  "name": "ca-practice-management-system",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-tenant Practice Management System for Indian CA firms",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "api:dev": "npm run start:dev -w apps/api",
+    "api:build": "npm run build -w apps/api",
+    "api:test": "npm run test -w apps/api",
+    "api:migration:run": "npm run migration:run -w apps/api",
+    "api:migration:revert": "npm run migration:revert -w apps/api"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

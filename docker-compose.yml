@@ -1,0 +1,35 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: ca-pms-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: tbm
+      MYSQL_USER: tbm_app
+      MYSQL_PASSWORD: change_me
+      MYSQL_ROOT_PASSWORD: root_change_me
+    ports:
+      - "3306:3306"
+    command: ["mysqld", "--default-authentication-plugin=mysql_native_password"]
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ca-pms-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql_data:
