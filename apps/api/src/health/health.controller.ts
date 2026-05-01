@@ -28,25 +28,29 @@ export class HealthController {
       checks.database = 'failed';
     }
 
-    const redis = new Redis({
-      host: this.config.get<string>('REDIS_HOST') ?? 'localhost',
-      port: Number(this.config.get<string>('REDIS_PORT') ?? 6379),
-      password: this.config.get<string>('REDIS_PASSWORD') || undefined,
-      maxRetriesPerRequest: 1,
-      lazyConnect: true,
-    });
+    if (this.config.get<string>('DISABLE_SCHEDULER') === 'true') {
+      checks.redis = 'disabled';
+    } else {
+      const redis = new Redis({
+        host: this.config.get<string>('REDIS_HOST') ?? 'localhost',
+        port: Number(this.config.get<string>('REDIS_PORT') ?? 6379),
+        password: this.config.get<string>('REDIS_PASSWORD') || undefined,
+        maxRetriesPerRequest: 1,
+        lazyConnect: true,
+      });
 
-    try {
-      await redis.connect();
-      await redis.ping();
-      checks.redis = 'ok';
-    } catch {
-      checks.redis = 'failed';
-    } finally {
-      redis.disconnect();
+      try {
+        await redis.connect();
+        await redis.ping();
+        checks.redis = 'ok';
+      } catch {
+        checks.redis = 'failed';
+      } finally {
+        redis.disconnect();
+      }
     }
 
-    const failed = Object.values(checks).some((status) => status !== 'ok');
+    const failed = Object.values(checks).some((status) => !['ok', 'disabled'].includes(status));
     if (failed) {
       throw new ServiceUnavailableException({ message: 'Service is not ready', checks });
     }

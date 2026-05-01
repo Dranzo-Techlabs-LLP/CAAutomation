@@ -33,7 +33,7 @@ import { Workflow } from '../workflows/workflow.entity';
 
 config({ path: process.env.NODE_ENV === 'test' ? '.env.test' : '.env' });
 
-export const AppDataSource = new DataSource({
+const AppDataSource = new DataSource({
   type: 'mysql',
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT ?? 3306),
@@ -71,7 +71,7 @@ export const AppDataSource = new DataSource({
     Notification,
     AuditLog,
   ],
-  migrations: ['src/database/migrations/*.ts'],
+  migrations: [`${__dirname}/migrations/*{.ts,.js}`],
   synchronize: false,
   logging: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
 });

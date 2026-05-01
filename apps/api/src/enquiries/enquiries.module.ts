@@ -9,5 +9,6 @@ import { Enquiry } from './enquiry.entity';
   imports: [TypeOrmModule.forFeature([Enquiry]), CustomersModule],
   controllers: [EnquiriesController],
   providers: [EnquiriesService],
+  exports: [EnquiriesService, TypeOrmModule],
 })
 export class EnquiriesModule {}
