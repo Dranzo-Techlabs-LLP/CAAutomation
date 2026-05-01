@@ -4,6 +4,9 @@ import { config } from 'dotenv';
 import { PasswordResetToken } from '../auth/password-reset-token.entity';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { Attachment } from '../attachments/attachment.entity';
+import { InvoiceLineItem } from '../billing/invoice-line-item.entity';
+import { Invoice } from '../billing/invoice.entity';
+import { Payment } from '../billing/payment.entity';
 import { Firm } from '../common/entities/firm.entity';
 import { Customer } from '../customers/customer.entity';
 import { Enquiry } from '../enquiries/enquiry.entity';
@@ -56,6 +59,9 @@ export const AppDataSource = new DataSource({
     TaskStepHistory,
     TaskRecurrence,
     RecurrenceRunLog,
+    Invoice,
+    InvoiceLineItem,
+    Payment,
   ],
   migrations: ['src/database/migrations/*.ts'],
   synchronize: false,

@@ -8,6 +8,10 @@ import { PasswordResetToken } from './auth/password-reset-token.entity';
 import { RefreshToken } from './auth/refresh-token.entity';
 import { Attachment } from './attachments/attachment.entity';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { BillingModule } from './billing/billing.module';
+import { InvoiceLineItem } from './billing/invoice-line-item.entity';
+import { Invoice } from './billing/invoice.entity';
+import { Payment } from './billing/payment.entity';
 import { Firm } from './common/entities/firm.entity';
 import { validateEnv } from './config/env.validation';
 import { Customer } from './customers/customer.entity';
@@ -81,6 +85,9 @@ import { WorkflowsModule } from './workflows/workflows.module';
           TaskStepHistory,
           TaskRecurrence,
           RecurrenceRunLog,
+          Invoice,
+          InvoiceLineItem,
+          Payment,
         ],
         synchronize: false,
         autoLoadEntities: false,
@@ -114,6 +121,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     AssignmentModule,
     RecurrencesModule,
     SchedulerModule,
+    BillingModule,
   ],
 })
 export class AppModule {}
