@@ -31,6 +31,11 @@ import { TimeLog } from './time-logs/time-log.entity';
 import { TimeLogsModule } from './time-logs/time-logs.module';
 import { User } from './users/user.entity';
 import { UsersModule } from './users/users.module';
+import { TaskStepHistory } from './workflows/task-step-history.entity';
+import { WorkflowStepTransition } from './workflows/workflow-step-transition.entity';
+import { WorkflowStep } from './workflows/workflow-step.entity';
+import { Workflow } from './workflows/workflow.entity';
+import { WorkflowsModule } from './workflows/workflows.module';
 
 @Module({
   imports: [
@@ -64,6 +69,10 @@ import { UsersModule } from './users/users.module';
           TaskComment,
           Attachment,
           TimeLog,
+          Workflow,
+          WorkflowStep,
+          WorkflowStepTransition,
+          TaskStepHistory,
         ],
         synchronize: false,
         autoLoadEntities: false,
@@ -83,6 +92,7 @@ import { UsersModule } from './users/users.module';
     TaskCommentsModule,
     AttachmentsModule,
     TimeLogsModule,
+    WorkflowsModule,
   ],
 })
 export class AppModule {}

@@ -17,6 +17,10 @@ import { TeamMember } from '../teams/team-member.entity';
 import { Team } from '../teams/team.entity';
 import { TimeLog } from '../time-logs/time-log.entity';
 import { User } from '../users/user.entity';
+import { TaskStepHistory } from '../workflows/task-step-history.entity';
+import { WorkflowStepTransition } from '../workflows/workflow-step-transition.entity';
+import { WorkflowStep } from '../workflows/workflow-step.entity';
+import { Workflow } from '../workflows/workflow.entity';
 
 config({ path: process.env.NODE_ENV === 'test' ? '.env.test' : '.env' });
 
@@ -44,6 +48,10 @@ export const AppDataSource = new DataSource({
     TaskComment,
     Attachment,
     TimeLog,
+    Workflow,
+    WorkflowStep,
+    WorkflowStepTransition,
+    TaskStepHistory,
   ],
   migrations: ['src/database/migrations/*.ts'],
   synchronize: false,
