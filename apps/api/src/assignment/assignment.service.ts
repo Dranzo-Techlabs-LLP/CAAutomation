@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { Customer } from '../customers/customer.entity';
 import { ServiceCatalog } from '../services-catalog/service-catalog.entity';
 import { TeamMember } from '../teams/team-member.entity';
@@ -134,7 +134,7 @@ export class AssignmentService {
           where: {
             firmId,
             assignedToUserId: member.userId,
-            status: Not(TaskStatus.Completed),
+            status: Not(In([TaskStatus.Completed, TaskStatus.Cancelled])),
           },
         }),
       })),

@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHash, createHmac, randomBytes } from 'crypto';
-import { MoreThan, Repository } from 'typeorm';
+import { IsNull, MoreThan, Repository } from 'typeorm';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { CreateWebhookDto } from './dto/create-webhook.dto';
 import { ApiKey } from './api-key.entity';
@@ -37,7 +37,7 @@ export class IntegrationsService {
     const key = await this.apiKeyRepository.findOne({
       where: [
         { keyHash: this.hash(rawKey), isActive: true, expiresAt: MoreThan(new Date()) },
-        { keyHash: this.hash(rawKey), isActive: true, expiresAt: null },
+        { keyHash: this.hash(rawKey), isActive: true, expiresAt: IsNull() },
       ],
     });
     if (!key || (!key.scopesJson.includes(requiredScope) && !key.scopesJson.includes('full-access'))) {

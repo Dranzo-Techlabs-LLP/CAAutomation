@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, Not, Repository } from 'typeorm';
+import { In, LessThanOrEqual, Not, Repository } from 'typeorm';
 import { AssignmentService } from '../assignment/assignment.service';
 import { CustomerStatus } from '../customers/customer.entity';
 import { CustomersService } from '../customers/customers.service';
@@ -99,7 +99,7 @@ export class RecurrencesService {
           where: {
             firmId,
             recurrenceId: recurrence.id,
-            status: Not(TaskStatus.Completed),
+            status: Not(In([TaskStatus.Completed, TaskStatus.Cancelled])),
           },
         });
         if (openTask) {
