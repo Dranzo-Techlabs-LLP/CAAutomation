@@ -10,6 +10,8 @@ import { Payment } from '../billing/payment.entity';
 import { Firm } from '../common/entities/firm.entity';
 import { Customer } from '../customers/customer.entity';
 import { Enquiry } from '../enquiries/enquiry.entity';
+import { ApiKey } from '../integrations/api-key.entity';
+import { Webhook } from '../integrations/webhook.entity';
 import { Permission } from '../permissions/permission.entity';
 import { RecurrenceRunLog } from '../recurrences/recurrence-run-log.entity';
 import { TaskRecurrence } from '../recurrences/task-recurrence.entity';
@@ -62,6 +64,8 @@ export const AppDataSource = new DataSource({
     Invoice,
     InvoiceLineItem,
     Payment,
+    ApiKey,
+    Webhook,
   ],
   migrations: ['src/database/migrations/*.ts'],
   synchronize: false,

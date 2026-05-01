@@ -20,8 +20,12 @@ import { DashboardsModule } from './dashboards/dashboards.module';
 import { EnquiriesModule } from './enquiries/enquiries.module';
 import { Enquiry } from './enquiries/enquiry.entity';
 import { HealthModule } from './health/health.module';
+import { ApiKey } from './integrations/api-key.entity';
+import { IntegrationsModule } from './integrations/integrations.module';
+import { Webhook } from './integrations/webhook.entity';
 import { Permission } from './permissions/permission.entity';
 import { PermissionsModule } from './permissions/permissions.module';
+import { PublicApiModule } from './public-api/public-api.module';
 import { RolePermission } from './roles/role-permission.entity';
 import { Role } from './roles/role.entity';
 import { RolesModule } from './roles/roles.module';
@@ -89,6 +93,8 @@ import { WorkflowsModule } from './workflows/workflows.module';
           Invoice,
           InvoiceLineItem,
           Payment,
+          ApiKey,
+          Webhook,
         ],
         synchronize: false,
         autoLoadEntities: false,
@@ -124,6 +130,8 @@ import { WorkflowsModule } from './workflows/workflows.module';
     SchedulerModule,
     BillingModule,
     DashboardsModule,
+    IntegrationsModule,
+    PublicApiModule,
   ],
 })
 export class AppModule {}
