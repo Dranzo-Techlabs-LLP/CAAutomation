@@ -3,19 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>TBM Practice OS Preview</title>
+    <title>TBM Practice OS</title>
     <style>
       :root {
-        color-scheme: light;
         --bg: #f7f9fb;
         --panel: #ffffff;
         --text: #172033;
         --muted: #667085;
         --border: #d8e0e8;
         --primary: #087f5b;
+        --primary-dark: #06684b;
+        --accent: #edf4f2;
+        --danger: #dc2626;
         --blue: #2563eb;
         --amber: #d97706;
-        --red: #dc2626;
+        --slate: #475467;
       }
       * { box-sizing: border-box; }
       body {
@@ -24,101 +26,511 @@
         color: var(--text);
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
+      button, input, select, textarea { font: inherit; }
+      button { cursor: pointer; }
       .layout { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
       aside { background: var(--panel); border-right: 1px solid var(--border); }
-      .brand { height: 64px; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid var(--border); font-weight: 700; }
+      .brand { height: 64px; display: flex; align-items: center; gap: 10px; padding: 0 20px; border-bottom: 1px solid var(--border); font-weight: 750; }
       .shield { width: 22px; height: 22px; border-radius: 6px; background: var(--primary); }
-      nav { padding: 12px; }
+      nav { padding: 12px; display: grid; gap: 4px; }
       nav button { width: 100%; border: 0; background: transparent; color: var(--muted); text-align: left; padding: 10px 12px; border-radius: 6px; font-size: 14px; }
-      nav button.active, nav button:hover { background: #edf4f2; color: var(--text); }
-      header { height: 64px; background: rgba(255,255,255,.92); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; }
-      h1, h2, p { margin: 0; }
+      nav button.active, nav button:hover { background: var(--accent); color: var(--text); }
+      header { height: 64px; background: rgba(255,255,255,.94); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: sticky; top: 0; z-index: 4; }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 18px; }
+      h2 { font-size: 18px; }
+      h3 { font-size: 14px; }
       .eyebrow { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
       main section { padding: 24px; display: grid; gap: 20px; }
+      .panel, .metric, .ticket-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
+      .panel { padding: 16px; }
+      .metric { padding: 16px; }
       .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-      .metric, .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
       .metric label { color: var(--muted); font-size: 12px; }
       .metric strong { display: block; margin-top: 8px; font-size: 28px; }
-      .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
-      .bars { display: grid; gap: 12px; margin-top: 16px; }
-      .bar-row { display: grid; grid-template-columns: 80px 1fr 42px; align-items: center; gap: 10px; font-size: 13px; }
-      .bar-track { height: 12px; border-radius: 999px; background: #e8edf3; overflow: hidden; }
-      .bar { height: 100%; border-radius: 999px; background: var(--blue); }
-      .list { margin-top: 12px; display: grid; gap: 0; }
-      .list div { display: flex; justify-content: space-between; border-top: 1px solid var(--border); padding: 13px 0; font-size: 14px; }
-      table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
-      th { color: var(--muted); font-size: 12px; text-align: left; padding: 10px 8px; text-transform: uppercase; }
-      td { border-top: 1px solid var(--border); padding: 12px 8px; }
-      .pill { display: inline-flex; border-radius: 4px; background: #edf4f2; padding: 4px 8px; font-size: 12px; }
+      .split { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); gap: 16px; align-items: start; }
+      .toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+      .segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+      .segmented button { border: 0; background: var(--panel); padding: 8px 12px; color: var(--muted); }
+      .segmented button.active { background: var(--primary); color: #fff; }
       .button { border: 0; background: var(--primary); color: white; border-radius: 6px; min-height: 36px; padding: 0 14px; font-weight: 700; }
-      @media (max-width: 900px) {
+      .button:hover { background: var(--primary-dark); }
+      .button.secondary { background: var(--accent); color: var(--text); }
+      .button.danger { background: var(--danger); }
+      .form { display: grid; gap: 10px; }
+      .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+      input, select, textarea { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; background: #fff; color: var(--text); }
+      textarea { min-height: 92px; resize: vertical; }
+      table { width: 100%; border-collapse: collapse; font-size: 14px; }
+      th { color: var(--muted); font-size: 12px; text-align: left; padding: 10px 8px; text-transform: uppercase; white-space: nowrap; }
+      td { border-top: 1px solid var(--border); padding: 12px 8px; vertical-align: top; }
+      .pill { display: inline-flex; border-radius: 4px; background: var(--accent); padding: 4px 8px; font-size: 12px; color: var(--slate); white-space: nowrap; }
+      .priority-urgent, .priority-high { color: var(--danger); }
+      .priority-medium { color: var(--amber); }
+      .priority-low { color: var(--blue); }
+      .ticket-card { padding: 12px; display: grid; gap: 8px; }
+      .ticket-card p { color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .kanban { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 12px; overflow-x: auto; }
+      .column { background: #f1f5f9; border: 1px solid var(--border); border-radius: 8px; padding: 10px; min-height: 320px; display: grid; align-content: start; gap: 10px; }
+      .column-title { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+      .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+      .login { width: min(420px, 100%); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 22px; display: grid; gap: 16px; }
+      .message { border-radius: 6px; padding: 10px 12px; background: var(--accent); color: var(--slate); font-size: 13px; }
+      .message.error { background: #fee2e2; color: #991b1b; }
+      .empty { padding: 26px; color: var(--muted); text-align: center; border: 1px dashed var(--border); border-radius: 8px; }
+      .hidden { display: none !important; }
+      @media (max-width: 980px) {
         .layout { display: block; }
         aside { display: none; }
-        .metrics, .grid { grid-template-columns: 1fr; }
+        .metrics, .split, .form-grid { grid-template-columns: 1fr; }
+        .kanban { grid-template-columns: repeat(4, 280px); }
       }
     </style>
   </head>
   <body>
-    <div class="layout">
-      <aside>
-        <div class="brand"><span class="shield"></span>TBM Practice OS</div>
-        <nav>
-          <button class="active">Dashboards</button>
-          <button>Customers</button>
-          <button>Recurrences</button>
-          <button>Compliance Calendar</button>
-          <button>Notifications</button>
-        </nav>
-      </aside>
-      <div>
-        <header>
-          <div>
-            <p class="eyebrow">Partner workspace</p>
-            <h1>Practice command center</h1>
-          </div>
-          <button class="button">Create recurrence</button>
-        </header>
-        <main>
-          <section>
-            <div class="metrics">
-              <div class="metric"><label>Revenue</label><strong>₹18.4L</strong></div>
-              <div class="metric"><label>WIP Tasks</label><strong>126</strong></div>
-              <div class="metric"><label>SLA Breaches</label><strong>9</strong></div>
-              <div class="metric"><label>Utilization</label><strong>78%</strong></div>
+    <div id="app"></div>
+    <script>
+      const API = 'http://localhost:3000/api/v1';
+      const state = {
+        token: localStorage.getItem('tbm_token') || '',
+        me: null,
+        isAdmin: false,
+        view: 'tickets',
+        boardMode: localStorage.getItem('tbm_board_mode') || 'kanban',
+        users: [],
+        roles: [],
+        customers: [],
+        services: [],
+        tickets: [],
+        message: '',
+        error: '',
+      };
+
+      const app = document.getElementById('app');
+      const statuses = ['assigned', 'in_progress', 'review', 'completed'];
+      const statusLabels = {
+        unassigned: 'Unassigned',
+        assigned: 'Assigned',
+        in_progress: 'In Progress',
+        on_hold: 'On Hold',
+        review: 'Review',
+        completed: 'Completed',
+        cancelled: 'Cancelled',
+        cancellation_requested: 'Cancellation Requested',
+      };
+
+      function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        })[char]);
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(`${API}${path}`, {
+          ...options,
+          headers: {
+            'content-type': 'application/json',
+            ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
+            ...(options.headers || {}),
+          },
+        });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.detail || body.message || body.title || `Request failed: ${response.status}`);
+        }
+        return response.status === 204 ? null : response.json();
+      }
+
+      async function refreshData() {
+        state.error = '';
+        state.message = '';
+        state.me = await api('/users/me');
+        const adminFetch = await api('/users').then((users) => ({ ok: true, users })).catch(() => ({ ok: false, users: [] }));
+        state.isAdmin = adminFetch.ok;
+        state.users = adminFetch.users;
+        state.roles = state.isAdmin ? await api('/roles').catch(() => []) : [];
+        state.customers = await api('/customers').catch(() => []);
+        state.services = await api('/services-catalog').catch(() => []);
+        const ticketResponse = state.isAdmin ? await api('/tasks?limit=100') : await api('/tasks/my?limit=100');
+        state.tickets = ticketResponse.data || [];
+      }
+
+      function render() {
+        if (!state.token) {
+          renderLogin();
+          return;
+        }
+        app.innerHTML = `
+          <div class="layout">
+            <aside>
+              <div class="brand"><span class="shield"></span>TBM Practice OS</div>
+              <nav>
+                <button class="${state.view === 'tickets' ? 'active' : ''}" data-view="tickets">Tickets</button>
+                ${state.isAdmin ? `<button class="${state.view === 'users' ? 'active' : ''}" data-view="users">Users</button>` : ''}
+                <button class="${state.view === 'dashboard' ? 'active' : ''}" data-view="dashboard">Dashboard</button>
+              </nav>
+            </aside>
+            <div>
+              <header>
+                <div>
+                  <p class="eyebrow">${state.isAdmin ? 'Admin workspace' : 'Assigned workspace'}</p>
+                  <h1>${escapeHtml(state.me?.name || 'Practice workspace')}</h1>
+                </div>
+                <button class="button secondary" id="logout">Log out</button>
+              </header>
+              <main>${state.view === 'users' ? usersView() : state.view === 'dashboard' ? dashboardView() : ticketsView()}</main>
             </div>
-            <div class="grid">
-              <div class="panel">
-                <h2>Team workload</h2>
-                <div class="bars">
-                  <div class="bar-row"><span>GST</span><span class="bar-track"><span class="bar" style="width: 84%"></span></span><strong>42</strong></div>
-                  <div class="bar-row"><span>Audit</span><span class="bar-track"><span class="bar" style="width: 50%"></span></span><strong>25</strong></div>
-                  <div class="bar-row"><span>ITR</span><span class="bar-track"><span class="bar" style="width: 72%"></span></span><strong>36</strong></div>
-                  <div class="bar-row"><span>ROC</span><span class="bar-track"><span class="bar" style="width: 36%"></span></span><strong>18</strong></div>
-                </div>
+          </div>
+        `;
+        bindShell();
+      }
+
+      function renderLogin() {
+        app.innerHTML = `
+          <div class="login-wrap">
+            <form class="login" id="login-form">
+              <div>
+                <p class="eyebrow">TBM Practice OS</p>
+                <h1>Sign in</h1>
               </div>
-              <div class="panel">
-                <h2>Today</h2>
-                <div class="list">
-                  <div><span>GSTR-3B review queue</span><span class="pill">Open</span></div>
-                  <div><span>ITR senior approval</span><span class="pill">Review</span></div>
-                  <div><span>ROC AOC-4 evidence pending</span><span class="pill">Due</span></div>
-                </div>
-              </div>
+              ${state.error ? `<div class="message error">${escapeHtml(state.error)}</div>` : ''}
+              <label>Email<input name="email" type="email" value="partner@demo.local" required /></label>
+              <label>Password<input name="password" type="password" value="DemoPassword123!" required /></label>
+              <button class="button" type="submit">Login</button>
+              <p class="eyebrow">Demo admin: partner@demo.local / DemoPassword123!</p>
+            </form>
+          </div>
+        `;
+        document.getElementById('login-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          try {
+            const result = await api('/auth/login', {
+              method: 'POST',
+              body: JSON.stringify({ email: form.get('email'), password: form.get('password') }),
+            });
+            state.token = result.accessToken;
+            localStorage.setItem('tbm_token', state.token);
+            await refreshData();
+            render();
+          } catch (error) {
+            state.error = error.message;
+            renderLogin();
+          }
+        });
+      }
+
+      function dashboardView() {
+        const open = state.tickets.filter((ticket) => !['completed', 'cancelled'].includes(ticket.status)).length;
+        const mine = state.tickets.filter((ticket) => ticket.assignedToUserId === state.me?.id).length;
+        const completed = state.tickets.filter((ticket) => ticket.status === 'completed').length;
+        return `
+          <section>
+            ${notice()}
+            <div class="metrics">
+              <div class="metric"><label>Total tickets</label><strong>${state.tickets.length}</strong></div>
+              <div class="metric"><label>Open tickets</label><strong>${open}</strong></div>
+              <div class="metric"><label>Assigned to me</label><strong>${mine}</strong></div>
+              <div class="metric"><label>Resolved</label><strong>${completed}</strong></div>
             </div>
             <div class="panel">
-              <h2>Recurrences</h2>
-              <table>
-                <thead><tr><th>Name</th><th>Customer</th><th>Service</th><th>Next run</th><th>Strategy</th><th>Status</th></tr></thead>
-                <tbody>
-                  <tr><td>GSTR-3B Monthly</td><td>Demo Client 1</td><td>GST</td><td>2026-05-20</td><td>team_least_loaded</td><td><span class="pill">Active</span></td></tr>
-                  <tr><td>TDS Payment</td><td>Demo Client 2</td><td>TDS</td><td>2026-05-21</td><td>customer_owner</td><td><span class="pill">Active</span></td></tr>
-                  <tr><td>PF & ESI Monthly</td><td>Demo Client 3</td><td>Payroll</td><td>2026-05-22</td><td>team_round_robin</td><td><span class="pill">Active</span></td></tr>
-                </tbody>
-              </table>
+              <h2>Operational focus</h2>
+              <p class="eyebrow" style="margin-top:10px">Use Tickets to switch between Kanban and list views, update status, and record resolutions.</p>
             </div>
           </section>
-        </main>
-      </div>
-    </div>
+        `;
+      }
+
+      function ticketsView() {
+        return `
+          <section>
+            ${notice()}
+            <div class="toolbar">
+              <div>
+                <h2>${state.isAdmin ? 'All tickets' : 'My assigned tickets'}</h2>
+                <p class="eyebrow">${state.isAdmin ? 'Admin can view every user and ticket' : 'Only tickets assigned to you are shown'}</p>
+              </div>
+              <div class="segmented">
+                <button class="${state.boardMode === 'kanban' ? 'active' : ''}" data-mode="kanban">Kanban</button>
+                <button class="${state.boardMode === 'list' ? 'active' : ''}" data-mode="list">List</button>
+              </div>
+            </div>
+            <div class="split">
+              <div>${state.boardMode === 'kanban' ? kanbanView() : ticketTable()}</div>
+              ${state.isAdmin ? createTicketPanel() : resolutionPanel()}
+            </div>
+          </section>
+        `;
+      }
+
+      function kanbanView() {
+        return `
+          <div class="kanban">
+            ${statuses.map((status) => {
+              const tickets = state.tickets.filter((ticket) => ticket.status === status);
+              return `
+                <div class="column">
+                  <div class="column-title"><span>${statusLabels[status]}</span><span>${tickets.length}</span></div>
+                  ${tickets.length ? tickets.map(ticketCard).join('') : '<div class="empty">No tickets</div>'}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+
+      function ticketTable() {
+        if (!state.tickets.length) return '<div class="empty">No tickets yet</div>';
+        return `
+          <div class="panel" style="overflow-x:auto">
+            <table>
+              <thead><tr><th>Ticket</th><th>Assigned</th><th>Status</th><th>Priority</th><th>Resolution</th><th></th></tr></thead>
+              <tbody>${state.tickets.map((ticket) => `
+                <tr>
+                  <td><strong>${escapeHtml(ticket.title)}</strong><br><span class="eyebrow">${escapeHtml(ticket.description || '')}</span></td>
+                  <td>${escapeHtml(userName(ticket.assignedToUserId))}</td>
+                  <td><span class="pill">${statusLabels[ticket.status] || ticket.status}</span></td>
+                  <td class="priority-${ticket.priority}">${escapeHtml(ticket.priority)}</td>
+                  <td>${escapeHtml(ticket.resolution || 'Pending')}</td>
+                  <td><button class="button secondary" data-edit-ticket="${ticket.id}">Resolve</button></td>
+                </tr>
+              `).join('')}</tbody>
+            </table>
+          </div>
+        `;
+      }
+
+      function ticketCard(ticket) {
+        return `
+          <article class="ticket-card">
+            <div class="toolbar">
+              <h3>${escapeHtml(ticket.title)}</h3>
+              <span class="pill priority-${ticket.priority}">${escapeHtml(ticket.priority)}</span>
+            </div>
+            <p>${escapeHtml(ticket.description || 'No description')}</p>
+            <p><strong>Assigned:</strong> ${escapeHtml(userName(ticket.assignedToUserId))}</p>
+            <p><strong>Resolution:</strong> ${escapeHtml(ticket.resolution || 'Pending')}</p>
+            <button class="button secondary" data-edit-ticket="${ticket.id}">Update</button>
+          </article>
+        `;
+      }
+
+      function createTicketPanel() {
+        const customerOptions = state.customers.map((customer) => `<option value="${customer.id}">${escapeHtml(customer.name)}</option>`).join('');
+        const serviceOptions = state.services.map((service) => `<option value="${service.id}">${escapeHtml(service.code)} - ${escapeHtml(service.name)}</option>`).join('');
+        const userOptions = state.users.map((user) => `<option value="${user.id}">${escapeHtml(user.name)} (${escapeHtml(user.email)})</option>`).join('');
+        return `
+          <div class="panel">
+            <h2>Create ticket</h2>
+            <form class="form" id="ticket-form" style="margin-top:14px">
+              <label>Title<input name="title" required placeholder="Ticket title" /></label>
+              <label>Description<textarea name="description" required placeholder="What needs to be done"></textarea></label>
+              <div class="form-grid">
+                <label>Customer<select name="customerId" required>${customerOptions}</select></label>
+                <label>Service<select name="serviceId"><option value="">None</option>${serviceOptions}</select></label>
+              </div>
+              <div class="form-grid">
+                <label>Assign to<select name="assignedToUserId" required>${userOptions}</select></label>
+                <label>Priority<select name="priority"><option>medium</option><option>low</option><option>high</option><option>urgent</option></select></label>
+              </div>
+              <button class="button" type="submit">Add ticket</button>
+            </form>
+          </div>
+        `;
+      }
+
+      function resolutionPanel() {
+        return `
+          <div class="panel">
+            <h2>Resolution</h2>
+            <p class="eyebrow" style="margin-top:8px">Select a ticket from the board or list to update its resolution and status.</p>
+            <div id="resolution-host" style="margin-top:14px"></div>
+          </div>
+        `;
+      }
+
+      function usersView() {
+        const roleOptions = state.roles.map((role) => `<option value="${role.id}">${escapeHtml(role.name)}</option>`).join('');
+        return `
+          <section>
+            ${notice()}
+            <div class="split">
+              <div class="panel" style="overflow-x:auto">
+                <div class="toolbar"><h2>Users</h2><span class="pill">${state.users.length} total</span></div>
+                <table style="margin-top:12px">
+                  <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+                  <tbody>${state.users.map((user) => `
+                    <tr>
+                      <td>${escapeHtml(user.name)}</td>
+                      <td>${escapeHtml(user.email)}</td>
+                      <td>${escapeHtml(roleName(user.roleId))}</td>
+                      <td><span class="pill">${user.isActive ? 'Active' : 'Inactive'}</span></td>
+                    </tr>
+                  `).join('')}</tbody>
+                </table>
+              </div>
+              <div class="panel">
+                <h2>Add user</h2>
+                <form class="form" id="user-form" style="margin-top:14px">
+                  <label>Name<input name="name" required /></label>
+                  <label>Email<input name="email" type="email" required /></label>
+                  <label>Phone<input name="phone" /></label>
+                  <label>Role<select name="roleId" required>${roleOptions}</select></label>
+                  <label>Temporary password<input name="password" value="Welcome@12345" minlength="12" required /></label>
+                  <button class="button" type="submit">Add user</button>
+                </form>
+              </div>
+            </div>
+          </section>
+        `;
+      }
+
+      function notice() {
+        if (state.error) return `<div class="message error">${escapeHtml(state.error)}</div>`;
+        if (state.message) return `<div class="message">${escapeHtml(state.message)}</div>`;
+        return '';
+      }
+
+      function userName(id) {
+        return state.users.find((user) => user.id === id)?.name || (id ? 'Assigned user' : 'Unassigned');
+      }
+
+      function roleName(id) {
+        return state.roles.find((role) => role.id === id)?.name || 'Role';
+      }
+
+      function bindShell() {
+        document.getElementById('logout')?.addEventListener('click', () => {
+          localStorage.removeItem('tbm_token');
+          state.token = '';
+          state.me = null;
+          render();
+        });
+        document.querySelectorAll('[data-view]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            state.view = button.dataset.view;
+            render();
+          });
+        });
+        document.querySelectorAll('[data-mode]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.boardMode = button.dataset.mode;
+            localStorage.setItem('tbm_board_mode', state.boardMode);
+            render();
+          });
+        });
+        document.getElementById('ticket-form')?.addEventListener('submit', handleCreateTicket);
+        document.getElementById('user-form')?.addEventListener('submit', handleCreateUser);
+        document.querySelectorAll('[data-edit-ticket]').forEach((button) => {
+          button.addEventListener('click', () => showResolutionForm(button.dataset.editTicket));
+        });
+      }
+
+      function showResolutionForm(ticketId) {
+        const ticket = state.tickets.find((item) => item.id === ticketId);
+        if (!ticket) return;
+        const host = document.getElementById('resolution-host') || document.querySelector('.split > .panel:last-child');
+        if (!host) return;
+        host.innerHTML = `
+          <form class="form" id="resolution-form">
+            <div>
+              <h3>${escapeHtml(ticket.title)}</h3>
+              <p class="eyebrow">${escapeHtml(ticket.description || '')}</p>
+            </div>
+            <label>Status<select name="status">
+              ${Object.entries(statusLabels).map(([value, label]) => `<option value="${value}" ${ticket.status === value ? 'selected' : ''}>${label}</option>`).join('')}
+            </select></label>
+            <label>Resolution<textarea name="resolution" required>${escapeHtml(ticket.resolution || '')}</textarea></label>
+            <button class="button" type="submit">Save resolution</button>
+          </form>
+        `;
+        document.getElementById('resolution-form').addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          await runAction(async () => {
+            await api(`/tasks/${ticket.id}/resolution`, {
+              method: 'PATCH',
+              body: JSON.stringify({ status: form.get('status'), resolution: form.get('resolution') }),
+            });
+            state.message = 'Ticket updated';
+          });
+        });
+      }
+
+      async function handleCreateTicket(event) {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        await runAction(async () => {
+          await api('/tasks', {
+            method: 'POST',
+            body: JSON.stringify({
+              title: form.get('title'),
+              description: form.get('description'),
+              customerId: form.get('customerId'),
+              serviceId: form.get('serviceId') || undefined,
+              assignedToUserId: form.get('assignedToUserId'),
+              priority: form.get('priority'),
+              billable: true,
+              generatedBy: 'manual',
+            }),
+          });
+          state.message = 'Ticket created';
+        });
+      }
+
+      async function handleCreateUser(event) {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        await runAction(async () => {
+          await api('/users', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: form.get('name'),
+              email: form.get('email'),
+              phone: form.get('phone') || undefined,
+              roleId: form.get('roleId'),
+              password: form.get('password'),
+            }),
+          });
+          state.message = 'User created';
+        });
+      }
+
+      async function runAction(callback) {
+        try {
+          state.error = '';
+          state.message = '';
+          await callback();
+          await refreshData();
+          render();
+        } catch (error) {
+          state.error = error.message;
+          render();
+        }
+      }
+
+      async function boot() {
+        if (!state.token) {
+          renderLogin();
+          return;
+        }
+        try {
+          await refreshData();
+          render();
+        } catch (error) {
+          localStorage.removeItem('tbm_token');
+          state.token = '';
+          state.error = error.message;
+          renderLogin();
+        }
+      }
+
+      boot();
+    </script>
   </body>
 </html>

@@ -31,6 +31,11 @@ export class CreateTaskDto {
   @IsString()
   description?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  resolution?: string;
+
   @ApiPropertyOptional({ enum: TaskPriority })
   @IsOptional()
   @IsEnum(TaskPriority)

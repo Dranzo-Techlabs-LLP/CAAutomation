@@ -54,6 +54,9 @@ export class Task extends TenantAuditColumns {
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  resolution?: string | null;
+
   @Column({ type: 'enum', enum: TaskPriority, default: TaskPriority.Medium })
   priority!: TaskPriority;
 

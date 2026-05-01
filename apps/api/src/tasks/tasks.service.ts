@@ -4,6 +4,7 @@ import { LessThan, Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { UpdateTaskResolutionDto } from './dto/update-task-resolution.dto';
 import { TaskResponseDto } from './dto/task-response.dto';
 import { Task, TaskStatus } from './task.entity';
 
@@ -43,6 +44,27 @@ export class TasksService {
     };
   }
 
+  async listAssignedToUser(
+    firmId: string,
+    userId: string,
+    query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<TaskResponseDto>> {
+    const limit = query.limit ?? 50;
+    const where = query.cursor
+      ? { firmId, assignedToUserId: userId, createdAt: LessThan(new Date(query.cursor)) }
+      : { firmId, assignedToUserId: userId };
+    const tasks = await this.taskRepository.find({
+      where,
+      order: { createdAt: 'DESC' },
+      take: limit + 1,
+    });
+    const page = tasks.slice(0, limit);
+    return {
+      data: page.map((task) => this.toResponse(task)),
+      nextCursor: tasks.length > limit ? page[page.length - 1]?.createdAt.toISOString() : undefined,
+    };
+  }
+
   async getEntityOrFail(firmId: string, id: string): Promise<Task> {
     const task = await this.taskRepository.findOne({ where: { firmId, id } });
     if (!task) {
@@ -56,6 +78,22 @@ export class TasksService {
     task.status = status;
     task.startedAt = status === TaskStatus.InProgress && !task.startedAt ? new Date() : task.startedAt;
     task.completedAt = status === TaskStatus.Completed ? new Date() : task.completedAt;
+    task.updatedBy = actorUserId;
+    return this.toResponse(await this.taskRepository.save(task));
+  }
+
+  async updateResolution(
+    firmId: string,
+    id: string,
+    dto: UpdateTaskResolutionDto,
+    actorUserId: string,
+  ): Promise<TaskResponseDto> {
+    const task = await this.getEntityOrFail(firmId, id);
+    task.resolution = dto.resolution;
+    if (dto.status) {
+      task.status = dto.status;
+      task.completedAt = dto.status === TaskStatus.Completed ? new Date() : task.completedAt;
+    }
     task.updatedBy = actorUserId;
     return this.toResponse(await this.taskRepository.save(task));
   }
@@ -83,6 +121,7 @@ export class TasksService {
       serviceId: task.serviceId,
       title: task.title,
       description: task.description,
+      resolution: task.resolution,
       priority: task.priority,
       status: task.status,
       assignedToUserId: task.assignedToUserId,

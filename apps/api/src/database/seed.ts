@@ -2,10 +2,12 @@ import 'reflect-metadata';
 import * as bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import { Firm } from '../common/entities/firm.entity';
+import { Customer, CustomerStatus, CustomerType, EnquirySource } from '../customers/customer.entity';
 import { Permission } from '../permissions/permission.entity';
 import { RolePermission } from '../roles/role-permission.entity';
 import { Role } from '../roles/role.entity';
 import { RecurrenceDefault, ServiceCatalog } from '../services-catalog/service-catalog.entity';
+import { Task, TaskGeneratedBy, TaskPriority, TaskStatus } from '../tasks/task.entity';
 import { TeamMember, TeamRole } from '../teams/team-member.entity';
 import { Team } from '../teams/team.entity';
 import { User } from '../users/user.entity';
@@ -56,6 +58,7 @@ const permissionSeeds = [
 async function seed() {
   await AppDataSource.initialize();
   const firmRepository = AppDataSource.getRepository(Firm);
+  const customerRepository = AppDataSource.getRepository(Customer);
   const permissionRepository = AppDataSource.getRepository(Permission);
   const roleRepository = AppDataSource.getRepository(Role);
   const rolePermissionRepository = AppDataSource.getRepository(RolePermission);
@@ -63,6 +66,7 @@ async function seed() {
   const teamRepository = AppDataSource.getRepository(Team);
   const teamMemberRepository = AppDataSource.getRepository(TeamMember);
   const serviceRepository = AppDataSource.getRepository(ServiceCatalog);
+  const taskRepository = AppDataSource.getRepository(Task);
   const workflowRepository = AppDataSource.getRepository(Workflow);
   const stepRepository = AppDataSource.getRepository(WorkflowStep);
 
@@ -94,12 +98,40 @@ async function seed() {
   );
 
   const partner = roles.find((role) => role.name === 'Partner');
+  const manager = roles.find((role) => role.name === 'Manager');
+  const seniorAssociate = roles.find((role) => role.name === 'Senior Associate');
+  const associate = roles.find((role) => role.name === 'Associate');
   if (partner) {
     await rolePermissionRepository.delete({ roleId: partner.id });
     await rolePermissionRepository.save(
       permissions.map((permission) => rolePermissionRepository.create({ roleId: partner.id, permissionId: permission.id })),
     );
   }
+  const assignPermissions = async (role: Role | undefined, codes: string[]) => {
+    if (!role) return;
+    const selected = permissions.filter((permission) => codes.includes(permission.code));
+    await rolePermissionRepository.delete({ roleId: role.id });
+    await rolePermissionRepository.save(
+      selected.map((permission) =>
+        rolePermissionRepository.create({ roleId: role.id, permissionId: permission.id }),
+      ),
+    );
+  };
+  await assignPermissions(manager, [
+    'user.view',
+    'team.view',
+    'customer.view',
+    'service.view',
+    'task.view',
+    'task.create',
+    'task.edit',
+    'task.comment',
+    'dashboard.manager',
+    'dashboard.associate',
+    'dashboard.compliance_calendar',
+  ]);
+  await assignPermissions(seniorAssociate, ['customer.view', 'task.view', 'task.edit', 'task.comment', 'dashboard.associate']);
+  await assignPermissions(associate, ['customer.view', 'task.view', 'task.edit', 'task.comment', 'dashboard.associate']);
 
   const passwordHash = await bcrypt.hash('DemoPassword123!', 12);
   const users = await Promise.all(
@@ -194,6 +226,79 @@ async function seed() {
           defaultAssigneeStrategy: 'team_least_loaded',
           defaultBillingAmount: '500000',
           recurrenceDefault,
+        }),
+      );
+    }
+  }
+
+  const customer =
+    (await customerRepository.findOne({ where: { firmId: firm.id, name: 'Acme Trading Private Limited' } })) ??
+    (await customerRepository.save(
+      customerRepository.create({
+        firmId: firm.id,
+        type: CustomerType.Company,
+        name: 'Acme Trading Private Limited',
+        contactNo: '+919999999999',
+        email: 'accounts@acme.example',
+        pan: 'AACCA1234A',
+        gstin: '27AACCA1234A1Z1',
+        address: 'Andheri East, Mumbai',
+        enquirySource: EnquirySource.Referral,
+        status: CustomerStatus.Active,
+        briefText: 'Demo client for GST, TDS, and ITR compliance workflows.',
+        ownerUserId: users[1]?.id,
+        defaultTeamId: teams[0]?.id,
+        onboardedAt: new Date(),
+      }),
+    ));
+
+  const gstr3b = await serviceRepository.findOne({ where: { firmId: firm.id, code: 'GSTR3B' } });
+  const itr = await serviceRepository.findOne({ where: { firmId: firm.id, code: 'ITR' } });
+  const demoTasks = [
+    {
+      title: 'Prepare April GSTR-3B working',
+      description: 'Download books, reconcile GSTR-2B, prepare liability summary, and attach evidence before manager review.',
+      priority: TaskPriority.High,
+      assignedToUserId: users[2]?.id,
+      serviceId: gstr3b?.id,
+      status: TaskStatus.Assigned,
+    },
+    {
+      title: 'Resolve ITR document gap',
+      description: 'Collect missing Form 16 and AIS clarification from the client before computation can proceed.',
+      priority: TaskPriority.Medium,
+      assignedToUserId: users[2]?.id,
+      serviceId: itr?.id,
+      status: TaskStatus.InProgress,
+    },
+    {
+      title: 'Review GST filing checklist',
+      description: 'Manager review for return data, challan values, and filing confirmation.',
+      priority: TaskPriority.Urgent,
+      assignedToUserId: users[1]?.id,
+      serviceId: gstr3b?.id,
+      status: TaskStatus.Review,
+    },
+  ];
+
+  for (const taskSeed of demoTasks) {
+    const existing = await taskRepository.findOne({ where: { firmId: firm.id, title: taskSeed.title } });
+    if (!existing) {
+      await taskRepository.save(
+        taskRepository.create({
+          firmId: firm.id,
+          customerId: customer.id,
+          serviceId: taskSeed.serviceId,
+          title: taskSeed.title,
+          description: taskSeed.description,
+          priority: taskSeed.priority,
+          status: taskSeed.status,
+          assignedToUserId: taskSeed.assignedToUserId,
+          assignedTeamId: teams[0]?.id,
+          dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+          generatedBy: TaskGeneratedBy.Manual,
+          billable: true,
+          billingAmount: '500000',
         }),
       );
     }

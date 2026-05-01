@@ -9,6 +9,7 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequestUser } from '../common/types/request-user';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { TaskResponseDto } from './dto/task-response.dto';
+import { UpdateTaskResolutionDto } from './dto/update-task-resolution.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { TasksService } from './tasks.service';
 
@@ -28,6 +29,14 @@ export class TasksController {
     return this.tasksService.list(user.firmId, query);
   }
 
+  @Get('my')
+  async myTickets(
+    @CurrentUser() user: RequestUser,
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<TaskResponseDto>> {
+    return this.tasksService.listAssignedToUser(user.firmId, user.id, query);
+  }
+
   @Post()
   @Permissions('task.create')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateTaskDto): Promise<TaskResponseDto> {
@@ -42,5 +51,14 @@ export class TasksController {
     @Body() dto: UpdateTaskStatusDto,
   ): Promise<TaskResponseDto> {
     return this.tasksService.updateStatus(user.firmId, id, dto.status, user.id);
+  }
+
+  @Patch(':id/resolution')
+  async updateResolution(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateTaskResolutionDto,
+  ): Promise<TaskResponseDto> {
+    return this.tasksService.updateResolution(user.firmId, id, dto, user.id);
   }
 }

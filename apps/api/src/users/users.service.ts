@@ -31,6 +31,14 @@ export class UsersService {
     return this.toResponse(user);
   }
 
+  async listForFirm(firmId: string): Promise<UserResponseDto[]> {
+    const users = await this.userRepository.find({
+      where: { firmId },
+      order: { name: 'ASC' },
+    });
+    return users.map((user) => this.toResponse(user));
+  }
+
   async createForFirm(firmId: string, dto: CreateUserDto, actorUserId: string): Promise<UserResponseDto> {
     const existing = await this.findByEmail(dto.email);
     if (existing) {

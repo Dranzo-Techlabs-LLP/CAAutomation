@@ -30,6 +30,12 @@ export class UsersController {
     return this.usersService.createForFirm(user.firmId, dto, user.id);
   }
 
+  @Get()
+  @Permissions('user.view')
+  async list(@CurrentUser() user: RequestUser): Promise<UserResponseDto[]> {
+    return this.usersService.listForFirm(user.firmId);
+  }
+
   @Get(':id')
   @Permissions('user.view')
   async getOne(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<UserResponseDto> {
