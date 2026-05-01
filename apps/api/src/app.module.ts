@@ -16,6 +16,10 @@ import { User } from './users/user.entity';
 import { UsersModule } from './users/users.module';
 import { PasswordResetToken } from './auth/password-reset-token.entity';
 import { RefreshToken } from './auth/refresh-token.entity';
+import { Customer } from './customers/customer.entity';
+import { CustomersModule } from './customers/customers.module';
+import { EnquiriesModule } from './enquiries/enquiries.module';
+import { Enquiry } from './enquiries/enquiry.entity';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -43,6 +47,8 @@ import { HealthModule } from './health/health.module';
           TeamMember,
           RefreshToken,
           PasswordResetToken,
+          Customer,
+          Enquiry,
         ],
         synchronize: false,
         autoLoadEntities: false,
@@ -55,6 +61,8 @@ import { HealthModule } from './health/health.module';
     PermissionsModule,
     TeamsModule,
     HealthModule,
+    CustomersModule,
+    EnquiriesModule,
   ],
 })
 export class AppModule {}

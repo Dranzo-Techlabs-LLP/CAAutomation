@@ -3,6 +3,8 @@ import { DataSource } from 'typeorm';
 import { config } from 'dotenv';
 import { Firm } from '../common/entities/firm.entity';
 import { PasswordResetToken } from '../auth/password-reset-token.entity';
+import { Customer } from '../customers/customer.entity';
+import { Enquiry } from '../enquiries/enquiry.entity';
 import { Permission } from '../permissions/permission.entity';
 import { RefreshToken } from '../auth/refresh-token.entity';
 import { RolePermission } from '../roles/role-permission.entity';
@@ -30,6 +32,8 @@ export const AppDataSource = new DataSource({
     TeamMember,
     RefreshToken,
     PasswordResetToken,
+    Customer,
+    Enquiry,
   ],
   migrations: ['src/database/migrations/*.ts'],
   synchronize: false,
