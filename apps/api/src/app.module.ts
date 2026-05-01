@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssignmentModule } from './assignment/assignment.module';
+import { AuditLog } from './audit/audit-log.entity';
+import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { PasswordResetToken } from './auth/password-reset-token.entity';
 import { RefreshToken } from './auth/refresh-token.entity';
@@ -23,6 +25,8 @@ import { HealthModule } from './health/health.module';
 import { ApiKey } from './integrations/api-key.entity';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { Webhook } from './integrations/webhook.entity';
+import { Notification } from './notifications/notification.entity';
+import { NotificationsModule } from './notifications/notifications.module';
 import { Permission } from './permissions/permission.entity';
 import { PermissionsModule } from './permissions/permissions.module';
 import { PublicApiModule } from './public-api/public-api.module';
@@ -95,6 +99,8 @@ import { WorkflowsModule } from './workflows/workflows.module';
           Payment,
           ApiKey,
           Webhook,
+          Notification,
+          AuditLog,
         ],
         synchronize: false,
         autoLoadEntities: false,
@@ -132,6 +138,8 @@ import { WorkflowsModule } from './workflows/workflows.module';
     DashboardsModule,
     IntegrationsModule,
     PublicApiModule,
+    NotificationsModule,
+    AuditModule,
   ],
 })
 export class AppModule {}
