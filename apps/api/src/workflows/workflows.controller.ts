@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -28,6 +28,23 @@ export class WorkflowsController {
   @Permissions('workflow.manage')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateWorkflowDto): Promise<Workflow> {
     return this.workflowsService.create(user.firmId, dto, user.id);
+  }
+
+  @Patch(':id')
+  @Permissions('workflow.manage')
+  async update(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() dto: CreateWorkflowDto,
+  ): Promise<Workflow> {
+    return this.workflowsService.update(user.firmId, id, dto, user.id);
+  }
+
+  @Delete(':id')
+  @Permissions('workflow.manage')
+  async remove(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ message: string }> {
+    await this.workflowsService.remove(user.firmId, id);
+    return { message: 'Workflow deleted' };
   }
 
   @Get(':id/steps')

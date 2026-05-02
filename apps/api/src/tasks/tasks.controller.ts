@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Optional, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { TaskLifecycleService } from '../automation-rules/task-lifecycle.service';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -18,7 +19,10 @@ import { TasksService } from './tasks.service';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('tasks')
 export class TasksController {
-  constructor(private readonly tasksService: TasksService) {}
+  constructor(
+    private readonly tasksService: TasksService,
+    @Optional() @Inject(TaskLifecycleService) private readonly lifecycle?: TaskLifecycleService,
+  ) {}
 
   @Get()
   @Permissions('task.view')
@@ -40,7 +44,9 @@ export class TasksController {
   @Post()
   @Permissions('task.create')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateTaskDto): Promise<TaskResponseDto> {
-    return this.tasksService.create(user.firmId, dto, user.id);
+    const result = await this.tasksService.create(user.firmId, dto, user.id);
+    this.lifecycle?.onTaskCreated(result.id, user.firmId, user.id);
+    return result;
   }
 
   @Patch(':id/status')
@@ -50,7 +56,9 @@ export class TasksController {
     @Param('id') id: string,
     @Body() dto: UpdateTaskStatusDto,
   ): Promise<TaskResponseDto> {
-    return this.tasksService.updateStatus(user.firmId, id, dto.status, user.id);
+    const result = await this.tasksService.updateStatus(user.firmId, id, dto.status, user.id);
+    this.lifecycle?.onTaskStatusChanged(result.id, user.firmId, user.id);
+    return result;
   }
 
   @Patch(':id/resolution')
@@ -59,6 +67,8 @@ export class TasksController {
     @Param('id') id: string,
     @Body() dto: UpdateTaskResolutionDto,
   ): Promise<TaskResponseDto> {
-    return this.tasksService.updateResolution(user.firmId, id, dto, user.id);
+    const result = await this.tasksService.updateResolution(user.firmId, id, dto, user.id);
+    this.lifecycle?.onTaskResolutionAdded(result.id, user.firmId, user.id);
+    return result;
   }
 }

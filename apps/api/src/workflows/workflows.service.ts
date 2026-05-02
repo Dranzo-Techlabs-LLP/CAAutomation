@@ -57,6 +57,46 @@ export class WorkflowsService {
     return workflow;
   }
 
+  async update(firmId: string, workflowId: string, dto: CreateWorkflowDto, actorUserId: string): Promise<Workflow> {
+    const workflow = await this.workflowRepository.findOne({ where: { id: workflowId, firmId } });
+    if (!workflow) throw new NotFoundException('Workflow not found');
+
+    workflow.name = dto.name;
+    workflow.description = dto.description ?? workflow.description;
+    workflow.appliesTo = dto.appliesTo ?? workflow.appliesTo;
+    workflow.updatedBy = actorUserId;
+    await this.workflowRepository.save(workflow);
+
+    await this.stepRepository.delete({ workflowId });
+    await this.stepRepository.save(
+      dto.steps.map((step) =>
+        this.stepRepository.create({
+          workflowId,
+          sequenceNo: step.sequenceNo,
+          name: step.name,
+          assigneeStrategy: step.assigneeStrategy,
+          assigneeValue: step.assigneeValue,
+          slaHours: step.slaHours,
+          requiresAttachment: step.requiresAttachment ?? false,
+          requiresApproval: step.requiresApproval ?? false,
+          approverRoleId: step.approverRoleId,
+          onCompleteAction: step.onCompleteAction ?? OnCompleteAction.NextStep,
+          createdBy: actorUserId,
+          updatedBy: actorUserId,
+        }),
+      ),
+    );
+
+    return workflow;
+  }
+
+  async remove(firmId: string, workflowId: string): Promise<void> {
+    const workflow = await this.workflowRepository.findOne({ where: { id: workflowId, firmId } });
+    if (!workflow) throw new NotFoundException('Workflow not found');
+    await this.stepRepository.delete({ workflowId });
+    await this.workflowRepository.softRemove(workflow);
+  }
+
   async list(firmId: string): Promise<Workflow[]> {
     return this.workflowRepository.find({ where: { firmId }, order: { name: 'ASC', version: 'DESC' } });
   }

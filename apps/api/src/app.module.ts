@@ -4,6 +4,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssignmentModule } from './assignment/assignment.module';
 import { AuditLog } from './audit/audit-log.entity';
+import { AutomationRule } from './automation-rules/automation-rule.entity';
+import { AutomationRulesModule } from './automation-rules/automation-rules.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { PasswordResetToken } from './auth/password-reset-token.entity';
@@ -101,6 +103,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
           Webhook,
           Notification,
           AuditLog,
+          AutomationRule,
         ],
         synchronize: false,
         autoLoadEntities: false,
@@ -144,6 +147,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     PublicApiModule,
     NotificationsModule,
     AuditModule,
+    AutomationRulesModule,
   ],
 })
 export class AppModule {}

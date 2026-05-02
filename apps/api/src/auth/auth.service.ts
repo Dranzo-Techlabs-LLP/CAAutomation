@@ -113,6 +113,20 @@ export class AuthService {
     return { message: 'Password reset successfully' };
   }
 
+  async getProfile(userId: string) {
+    const user = await this.usersService.findActiveById(userId);
+    if (!user) throw new UnauthorizedException('User not found');
+    const role = await this.rolesService.findById(user.roleId);
+    return {
+      id: user.id,
+      firmId: user.firmId,
+      email: user.email,
+      name: user.name,
+      roleId: user.roleId,
+      roleName: role?.name ?? null,
+    };
+  }
+
   async permissionsForUser(user: User): Promise<string[]> {
     return this.rolesService.getPermissionCodes(user.roleId);
   }

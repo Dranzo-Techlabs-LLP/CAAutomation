@@ -7,6 +7,8 @@ import { Permission } from '../permissions/permission.entity';
 import { RolePermission } from '../roles/role-permission.entity';
 import { Role } from '../roles/role.entity';
 import { RecurrenceDefault, ServiceCatalog } from '../services-catalog/service-catalog.entity';
+import { Enquiry, EnquiryStatus } from '../enquiries/enquiry.entity';
+import { AssignmentStrategy, RecurrencePatternType, TaskRecurrence } from '../recurrences/task-recurrence.entity';
 import { Task, TaskGeneratedBy, TaskPriority, TaskStatus } from '../tasks/task.entity';
 import { TeamMember, TeamRole } from '../teams/team-member.entity';
 import { Team } from '../teams/team.entity';
@@ -252,6 +254,9 @@ async function seed() {
       }),
     ));
 
+  const recurrenceRepository = AppDataSource.getRepository(TaskRecurrence);
+  const enquiryRepository = AppDataSource.getRepository(Enquiry);
+
   const gstr3b = await serviceRepository.findOne({ where: { firmId: firm.id, code: 'GSTR3B' } });
   const itr = await serviceRepository.findOne({ where: { firmId: firm.id, code: 'ITR' } });
   const demoTasks = [
@@ -302,6 +307,81 @@ async function seed() {
         }),
       );
     }
+  }
+
+  const tds = await serviceRepository.findOne({ where: { firmId: firm.id, code: 'TDS_Q' } });
+  const demoRecurrences = [
+    {
+      name: 'GSTR-3B Monthly',
+      serviceId: gstr3b!.id,
+      customerId: customer.id,
+      patternType: RecurrencePatternType.Monthly,
+      patternExpression: '0 0 13 * *',
+      assignmentStrategy: AssignmentStrategy.TeamLeastLoaded,
+      assignmentTargetTeamId: teams[0]?.id,
+      workflowId: workflow.id,
+    },
+    {
+      name: 'TDS Quarterly Return',
+      serviceId: tds!.id,
+      customerId: customer.id,
+      patternType: RecurrencePatternType.Quarterly,
+      patternExpression: '0 0 25 1,4,7,10 *',
+      assignmentStrategy: AssignmentStrategy.CustomerOwner,
+    },
+    {
+      name: 'ITR Yearly Filing',
+      serviceId: itr!.id,
+      customerId: customer.id,
+      patternType: RecurrencePatternType.Yearly,
+      patternExpression: '0 0 1 7 *',
+      assignmentStrategy: AssignmentStrategy.TeamRoundRobin,
+      assignmentTargetTeamId: teams[2]?.id,
+    },
+  ];
+
+  for (const rec of demoRecurrences) {
+    const existing = await recurrenceRepository.findOne({ where: { firmId: firm.id, name: rec.name } });
+    if (!existing) {
+      await recurrenceRepository.save(
+        recurrenceRepository.create({
+          firmId: firm.id,
+          name: rec.name,
+          serviceId: rec.serviceId,
+          customerId: rec.customerId,
+          patternType: rec.patternType,
+          patternExpression: rec.patternExpression,
+          startDate: new Date(),
+          nextRunAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          isActive: true,
+          generateLeadDays: 5,
+          preventOverlap: true,
+          templateJson: { title: rec.name, priority: 'medium', estimatedHours: '4' },
+          assignmentStrategy: rec.assignmentStrategy,
+          assignmentTargetTeamId: rec.assignmentTargetTeamId ?? null,
+          workflowId: rec.workflowId ?? null,
+          createdByUserId: users[0]?.id,
+          createdBy: users[0]?.id,
+          updatedBy: users[0]?.id,
+        }),
+      );
+    }
+  }
+
+  const existingEnquiry = await enquiryRepository.findOne({ where: { firmId: firm.id, customerId: customer.id } });
+  if (!existingEnquiry) {
+    await enquiryRepository.save(
+      enquiryRepository.create({
+        firmId: firm.id,
+        customerId: customer.id,
+        source: EnquirySource.Referral,
+        brief: 'Client interested in GST compliance and annual ITR filing services.',
+        status: EnquiryStatus.Converted,
+        convertedAt: new Date(),
+        createdBy: users[1]?.id,
+        updatedBy: users[1]?.id,
+      }),
+    );
   }
 
   await AppDataSource.destroy();

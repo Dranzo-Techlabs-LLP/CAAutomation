@@ -1,5 +1,8 @@
-import { Body, Controller, Post } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RequestUser } from '../common/types/request-user';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { PasswordResetConfirmDto } from './dto/password-reset-confirm.dto';
@@ -11,6 +14,17 @@ import { TokenResponseDto } from './dto/token-response.dto';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('profile')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async profile(@CurrentUser() user: RequestUser) {
+    const fullUser = await this.authService.getProfile(user.id);
+    return {
+      ...fullUser,
+      permissions: user.permissions,
+    };
+  }
 
   @Post('login')
   async login(@Body() dto: LoginDto): Promise<TokenResponseDto> {

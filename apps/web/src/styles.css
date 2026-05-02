@@ -94,4 +94,44 @@ body {
 .primary-button {
   background: hsl(var(--primary));
   color: white;
+  cursor: pointer;
+}
+
+.primary-button:hover {
+  opacity: 0.9;
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-button:hover {
+  background: hsl(var(--accent));
+}
+
+.input-field {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  padding: 6px 10px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input-field:focus {
+  border-color: hsl(var(--primary));
+}
+
+select.input-field {
+  appearance: auto;
+}
+
+textarea.input-field {
+  resize: vertical;
 }

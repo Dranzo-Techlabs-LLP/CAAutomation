@@ -27,6 +27,10 @@ export class RolesService {
     return rolePermissions.map((rolePermission) => rolePermission.permission.code);
   }
 
+  async findById(roleId: string): Promise<Role | null> {
+    return this.roleRepository.findOne({ where: { id: roleId } });
+  }
+
   async listForFirm(firmId: string): Promise<RoleResponseDto[]> {
     const roles = await this.roleRepository.find({
       where: { firmId },
