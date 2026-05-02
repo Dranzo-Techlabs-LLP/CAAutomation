@@ -56,6 +56,7 @@ import { TaskStepHistory } from './workflows/task-step-history.entity';
 import { WorkflowStepTransition } from './workflows/workflow-step-transition.entity';
 import { WorkflowStep } from './workflows/workflow-step.entity';
 import { Workflow } from './workflows/workflow.entity';
+import { SettingsModule } from './settings/settings.module';
 import { WorkflowsModule } from './workflows/workflows.module';
 
 @Module({
@@ -148,6 +149,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     NotificationsModule,
     AuditModule,
     AutomationRulesModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, Bell, BookOpen, CalendarDays, ChevronRight, ClipboardList,
-  FileText, LogOut, Menu, Moon, Repeat, Shield, ShieldCheck, Sun, Users, UsersRound, Workflow, X,
+  FileText, LogOut, Menu, Moon, Repeat, Settings, Shield, ShieldCheck, Sun, Users, UsersRound, Workflow, X,
 } from 'lucide-react';
 import { useAuth } from './lib/auth';
 import { useUiStore } from './lib/ui-store';
@@ -22,6 +22,7 @@ import UsersPage from './pages/UsersPage';
 import ServicesPage from './pages/ServicesPage';
 import ComplianceCalendarPage from './pages/ComplianceCalendarPage';
 import WorkflowsPage from './pages/WorkflowsPage';
+import SettingsPage from './pages/SettingsPage';
 import './styles.css';
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ const NAV: NavEntry[] = [
   { path: '/workflows', label: 'Workflows', icon: <Workflow />, permission: 'workflow.view' },
   { path: '/notifications', label: 'Notifications', icon: <Bell /> },
   { path: '/audit', label: 'Audit Logs', icon: <Shield />, permission: 'audit.view' },
+  { path: '/settings', label: 'Settings', icon: <Settings />, permission: 'settings.edit' },
   { path: '/admin/users', label: 'Users & Roles', icon: <Shield />, permission: 'user.view' },
 ];
 
@@ -138,6 +140,7 @@ function AppShell() {
           <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/audit" element={<AuditPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

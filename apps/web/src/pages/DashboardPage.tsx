@@ -44,10 +44,20 @@ export default function DashboardPage() {
     if (isManager) {
       api<ManagerData>('/dashboards/manager').then(setManager).catch(() => {});
     }
-    api<AssociateData>('/dashboards/associate').then(setAssociate).catch(() => {});
-    api<{ data: { status: string }[] }>('/tasks?limit=500')
-      .then((r) => setTasks(r.data || []))
-      .catch(() => {});
+    if (!isPartner && !isManager) {
+      api<AssociateData>('/dashboards/associate').then(setAssociate).catch(() => {});
+    }
+    // Paginate through all tasks (API max 100 per page)
+    const base = isPartner || isManager ? '/tasks' : '/tasks/my';
+    const all: { status: string }[] = [];
+    const fetchPage = (cursor?: string): Promise<void> => {
+      const url = cursor ? `${base}?limit=100&cursor=${cursor}` : `${base}?limit=100`;
+      return api<{ data: { status: string }[]; nextCursor?: string }>(url).then((r) => {
+        all.push(...(r.data || []));
+        if (r.nextCursor) return fetchPage(r.nextCursor);
+      });
+    };
+    fetchPage().then(() => setTasks(all)).catch(() => {});
   }, [isPartner, isManager]);
 
   const statusCounts = tasks.reduce<Record<string, number>>((acc, t) => {
@@ -89,7 +99,7 @@ export default function DashboardPage() {
 
       {workloadData.length > 0 && (
         <div className="panel">
-          <div className="panel-title">Task Distribution by Status</div>
+          <div className="panel-title">{isPartner || isManager ? 'Task Distribution by Status' : 'My Tasks by Status'}</div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={workloadData}>

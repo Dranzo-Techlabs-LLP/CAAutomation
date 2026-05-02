@@ -24,6 +24,12 @@ export class BillingController {
     return this.billingService.listInvoices(user.firmId);
   }
 
+  @Get('invoices/:id')
+  @Permissions('billing.view')
+  async getInvoice(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+    return this.billingService.getInvoiceWithLineItems(user.firmId, id);
+  }
+
   @Post('invoices')
   @Permissions('invoice.create')
   async createInvoice(@CurrentUser() user: RequestUser, @Body() dto: CreateInvoiceDto): Promise<Invoice> {

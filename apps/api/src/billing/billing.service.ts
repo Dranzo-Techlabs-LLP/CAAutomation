@@ -62,6 +62,13 @@ export class BillingService {
     return this.invoiceRepository.find({ where: { firmId }, order: { issueDate: 'DESC' }, take: 100 });
   }
 
+  async getInvoiceWithLineItems(firmId: string, invoiceId: string): Promise<Invoice & { lineItems: InvoiceLineItem[] }> {
+    const invoice = await this.invoiceRepository.findOne({ where: { firmId, id: invoiceId } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    const lineItems = await this.lineItemRepository.find({ where: { invoiceId } });
+    return { ...invoice, lineItems };
+  }
+
   async recordPayment(firmId: string, invoiceId: string, dto: RecordPaymentDto, actorUserId: string): Promise<Payment> {
     const invoice = await this.invoiceRepository.findOne({ where: { firmId, id: invoiceId } });
     if (!invoice) throw new NotFoundException('Invoice not found');
