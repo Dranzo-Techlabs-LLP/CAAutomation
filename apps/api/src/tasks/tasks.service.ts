@@ -4,6 +4,7 @@ import { LessThan, Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskResolutionDto } from './dto/update-task-resolution.dto';
 import { TaskResponseDto } from './dto/task-response.dto';
 import { Task, TaskStatus } from './task.entity';
@@ -71,6 +72,19 @@ export class TasksService {
       throw new NotFoundException('Task not found');
     }
     return task;
+  }
+
+  async update(firmId: string, id: string, dto: UpdateTaskDto, actorUserId: string): Promise<TaskResponseDto> {
+    const task = await this.getEntityOrFail(firmId, id);
+    if (dto.title !== undefined) task.title = dto.title;
+    if (dto.description !== undefined) task.description = dto.description;
+    if (dto.priority !== undefined) task.priority = dto.priority;
+    if (dto.assignedToUserId !== undefined) task.assignedToUserId = dto.assignedToUserId;
+    if (dto.assignedTeamId !== undefined) task.assignedTeamId = dto.assignedTeamId;
+    if (dto.dueDate !== undefined) task.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+    if (dto.resolution !== undefined) task.resolution = dto.resolution;
+    task.updatedBy = actorUserId;
+    return this.toResponse(await this.taskRepository.save(task));
   }
 
   async updateStatus(firmId: string, id: string, status: TaskStatus, actorUserId: string): Promise<TaskResponseDto> {

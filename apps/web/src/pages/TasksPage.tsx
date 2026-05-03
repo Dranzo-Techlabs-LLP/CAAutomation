@@ -52,9 +52,10 @@ export default function TasksPage() {
   const canCreate = hasPermission('task.create');
   const canEdit = hasPermission('task.edit');
   const canViewAll = hasPermission('task.view');
-  const canComment = hasPermission('task.comment');
-  const canAttach = hasPermission('attachment.create');
-  const canLogTime = hasPermission('time_log.create');
+  // Allow commenting/attaching/time-logging if user has specific permission OR general task.edit
+  const canComment = hasPermission('task.comment') || hasPermission('task.edit');
+  const canAttach = hasPermission('attachment.create') || hasPermission('task.edit');
+  const canLogTime = hasPermission('time_log.create') || hasPermission('task.edit');
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
@@ -241,6 +242,10 @@ export default function TasksPage() {
           currentUserId={user?.id || ''}
           onStatusChange={(s) => { updateStatus(selectedTask.id, s); setSelectedTask({ ...selectedTask, status: s }); }}
           onResolutionChange={(r) => { updateResolution(selectedTask.id, r); setSelectedTask({ ...selectedTask, resolution: r }); }}
+          onUpdate={async (fields) => {
+            await api(`/tasks/${selectedTask.id}`, { method: 'PATCH', body: JSON.stringify(fields) });
+            load();
+          }}
           onClose={() => { setSelectedTask(null); load(); }}
         />
       )}
@@ -251,12 +256,13 @@ export default function TasksPage() {
 /* ── Task Detail Panel (modal) ── */
 function TaskDetailPanel({
   task, customerMap, userMap, users, canEdit, canComment, canAttach, canLogTime, currentUserId,
-  onStatusChange, onResolutionChange, onClose,
+  onStatusChange, onResolutionChange, onUpdate, onClose,
 }: {
   task: Task; customerMap: Record<string, string>; userMap: Record<string, string>;
   users: { id: string; name: string }[];
   canEdit: boolean; canComment: boolean; canAttach: boolean; canLogTime: boolean; currentUserId: string;
-  onStatusChange: (s: string) => void; onResolutionChange: (r: string) => void; onClose: () => void;
+  onStatusChange: (s: string) => void; onResolutionChange: (r: string) => void;
+  onUpdate: (fields: Record<string, unknown>) => Promise<void>; onClose: () => void;
 }) {
   const [tab, setTab] = useState<DetailTab>('details');
   const [comments, setComments] = useState<Comment[]>([]);
@@ -265,12 +271,20 @@ function TaskDetailPanel({
   const [commentText, setCommentText] = useState('');
   const [resolution, setResolution] = useState(task.resolution || '');
   const [editingResolution, setEditingResolution] = useState(false);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: task.title,
+    description: task.description || '',
+    priority: task.priority,
+    assignedToUserId: task.assignedToUserId || '',
+    dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
+  });
 
   // Attachment form
   const [attachForm, setAttachForm] = useState({ fileName: '', fileUrl: '', tag: 'other' });
 
   // Time log form
-  const [timeForm, setTimeForm] = useState({ startedAt: '', endedAt: '', notes: '', isBillable: true });
+  const [timeForm, setTimeForm] = useState({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true });
   const [showTimeForm, setShowTimeForm] = useState(false);
 
   const loadComments = () => api<Comment[]>(`/tasks/${task.id}/comments`).then(setComments).catch(() => {});
@@ -332,18 +346,25 @@ function TaskDetailPanel({
 
   const handleTimeLog = async (e: React.FormEvent) => {
     e.preventDefault();
+    const hrs = parseInt(timeForm.hours || '0', 10);
+    const mins = parseInt(timeForm.minutes || '0', 10);
+    if (hrs === 0 && mins === 0) { alert('Enter duration'); return; }
+    const totalMinutes = hrs * 60 + mins;
+    // Build start/end from date + duration
+    const startDate = new Date(timeForm.date + 'T09:00:00');
+    const endDate = new Date(startDate.getTime() + totalMinutes * 60000);
     try {
       await api('/time-logs', {
         method: 'POST',
         body: JSON.stringify({
           taskId: task.id,
-          startedAt: new Date(timeForm.startedAt).toISOString(),
-          endedAt: timeForm.endedAt ? new Date(timeForm.endedAt).toISOString() : undefined,
+          startedAt: startDate.toISOString(),
+          endedAt: endDate.toISOString(),
           notes: timeForm.notes || undefined,
           isBillable: timeForm.isBillable,
         }),
       });
-      setTimeForm({ startedAt: '', endedAt: '', notes: '', isBillable: true });
+      setTimeForm({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true });
       setShowTimeForm(false);
       loadTimeLogs();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
@@ -404,24 +425,120 @@ function TaskDetailPanel({
           {/* Details Tab */}
           {tab === 'details' && (
             <div className="space-y-4">
-              {task.description && (
-                <div><span className="text-xs font-medium text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap">{task.description}</p></div>
-              )}
-
-              {/* Status Change */}
-              {canEdit && (
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
-                  <select className="input-field" value={task.status} onChange={(e) => onStatusChange(e.target.value)}>
-                    {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                  </select>
+              {/* Edit / View Toggle */}
+              {canEdit && !editingDetails && (
+                <div className="flex justify-end">
+                  <button className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-primary hover:bg-accent" onClick={() => setEditingDetails(true)}>
+                    Edit Task
+                  </button>
                 </div>
               )}
 
+              {editingDetails ? (
+                /* ── Edit Mode ── */
+                <div className="space-y-3 rounded-md border border-primary/30 bg-primary/5 p-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Title</label>
+                    <input className="input-field" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label>
+                    <textarea className="input-field" rows={3} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Priority</label>
+                      <select className="input-field" value={editForm.priority} onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}>
+                        {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
+                      <select className="input-field" value={task.status} onChange={(e) => onStatusChange(e.target.value)}>
+                        {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Assign To</label>
+                      <select className="input-field" value={editForm.assignedToUserId} onChange={(e) => setEditForm({ ...editForm, assignedToUserId: e.target.value })}>
+                        <option value="">Unassigned</option>
+                        {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</label>
+                      <input type="date" className="input-field" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1">
+                    <button className="primary-button text-xs" onClick={async () => {
+                      try {
+                        const body: Record<string, unknown> = { title: editForm.title, priority: editForm.priority };
+                        if (editForm.description) body.description = editForm.description;
+                        if (editForm.assignedToUserId) body.assignedToUserId = editForm.assignedToUserId;
+                        if (editForm.dueDate) body.dueDate = new Date(editForm.dueDate).toISOString();
+                        await onUpdate(body);
+                        setEditingDetails(false);
+                      } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Save failed'); }
+                    }}>Save Changes</button>
+                    <button className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent" onClick={() => setEditingDetails(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                /* ── View Mode ── */
+                <>
+                  {task.description && (
+                    <div><span className="text-xs font-medium text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap rounded-md bg-accent/20 p-2">{task.description}</p></div>
+                  )}
+
+                  {/* Status (view-only when not editing) */}
+                  {canEdit && (
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Quick Status Change</label>
+                      <select className="input-field" value={task.status} onChange={(e) => onStatusChange(e.target.value)}>
+                        {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Info Grid */}
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-md border border-border p-2.5">
+                      <span className="text-xs font-medium text-muted-foreground">Customer</span>
+                      <p className="mt-0.5 font-medium">{customerMap[task.customerId] || '-'}</p>
+                    </div>
+                    <div className="rounded-md border border-border p-2.5">
+                      <span className="text-xs font-medium text-muted-foreground">Assignee</span>
+                      <p className="mt-0.5 font-medium">{task.assignedToUserId ? (userMap[task.assignedToUserId] || '-') : 'Unassigned'}</p>
+                    </div>
+                    <div className="rounded-md border border-border p-2.5">
+                      <span className="text-xs font-medium text-muted-foreground">Priority</span>
+                      <p className={`mt-0.5 font-medium capitalize ${PRIORITY_COLORS[task.priority] || ''}`}>{task.priority}</p>
+                    </div>
+                    <div className="rounded-md border border-border p-2.5">
+                      <span className="text-xs font-medium text-muted-foreground">Total Effort</span>
+                      <p className="mt-0.5 font-medium">{totalHours} hrs ({timeLogs.length} entries)</p>
+                    </div>
+                    <div className="rounded-md border border-border p-2.5">
+                      <span className="text-xs font-medium text-muted-foreground">Generated By</span>
+                      <p className="mt-0.5 font-medium capitalize">{task.generatedBy}</p>
+                    </div>
+                    {task.dueDate && (
+                      <div className="rounded-md border border-border p-2.5">
+                        <span className="text-xs font-medium text-muted-foreground">Due Date</span>
+                        <p className={`mt-0.5 font-medium ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600' : ''}`}>
+                          {new Date(task.dueDate).toLocaleDateString('en-IN')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
               {/* Resolution */}
-              <div>
+              <div className="rounded-md border border-border p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Resolution</span>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Resolution</span>
                   {canEdit && !editingResolution && (
                     <button className="text-xs text-primary hover:underline" onClick={() => setEditingResolution(true)}>
                       {task.resolution ? 'Edit' : 'Add Resolution'}
@@ -429,7 +546,7 @@ function TaskDetailPanel({
                   )}
                 </div>
                 {editingResolution ? (
-                  <div className="mt-1 space-y-2">
+                  <div className="mt-2 space-y-2">
                     <textarea className="input-field" rows={3} value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="Describe the resolution..." />
                     <div className="flex gap-2">
                       <button className="primary-button text-xs" onClick={saveResolution}>Save</button>
@@ -437,18 +554,10 @@ function TaskDetailPanel({
                     </div>
                   </div>
                 ) : task.resolution ? (
-                  <p className="mt-1 rounded-md bg-accent/30 p-2 text-sm whitespace-pre-wrap">{task.resolution}</p>
+                  <p className="mt-2 text-sm whitespace-pre-wrap">{task.resolution}</p>
                 ) : (
-                  <p className="mt-1 text-xs text-muted-foreground italic">No resolution yet</p>
+                  <p className="mt-2 text-xs text-muted-foreground italic">No resolution yet</p>
                 )}
-              </div>
-
-              {/* Info Grid */}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-xs font-medium text-muted-foreground">Customer</span><p className="mt-0.5">{customerMap[task.customerId] || '-'}</p></div>
-                <div><span className="text-xs font-medium text-muted-foreground">Assignee</span><p className="mt-0.5">{task.assignedToUserId ? (userMap[task.assignedToUserId] || '-') : 'Unassigned'}</p></div>
-                <div><span className="text-xs font-medium text-muted-foreground">Generated By</span><p className="mt-0.5 capitalize">{task.generatedBy}</p></div>
-                <div><span className="text-xs font-medium text-muted-foreground">Total Effort</span><p className="mt-0.5">{totalHours} hrs ({timeLogs.length} entries)</p></div>
               </div>
             </div>
           )}
@@ -484,33 +593,47 @@ function TaskDetailPanel({
           {tab === 'attachments' && (
             <div className="space-y-4">
               {canAttach && (
-                <div className="space-y-3">
-                  {/* File Upload */}
-                  <div>
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent">
-                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+                <div className="space-y-4">
+                  {/* File Upload - prominent button */}
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md bg-primary px-4 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></svg>
                       Upload File
                       <input type="file" className="hidden" onChange={handleAttachFile} />
                     </label>
+                    <span className="text-xs text-muted-foreground">or add a link below</span>
                   </div>
 
-                  {/* URL Attachment */}
-                  <form onSubmit={handleAttach} className="flex gap-2">
-                    <input className="input-field flex-1" placeholder="File name" value={attachForm.fileName} onChange={(e) => setAttachForm({ ...attachForm, fileName: e.target.value })} required />
-                    <input className="input-field flex-1" placeholder="File URL" value={attachForm.fileUrl} onChange={(e) => setAttachForm({ ...attachForm, fileUrl: e.target.value })} required />
-                    <select className="input-field w-28" value={attachForm.tag} onChange={(e) => setAttachForm({ ...attachForm, tag: e.target.value })}>
-                      <option value="evidence">Evidence</option>
-                      <option value="proposal">Proposal</option>
-                      <option value="signed_doc">Signed Doc</option>
-                      <option value="other">Other</option>
-                    </select>
-                    <button type="submit" className="primary-button text-xs whitespace-nowrap">Add Link</button>
+                  {/* URL Attachment - proper labeled form */}
+                  <form onSubmit={handleAttach} className="rounded-md border border-border p-3 space-y-3">
+                    <div className="text-xs font-medium text-muted-foreground mb-2">Attach Link / URL</div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs text-muted-foreground">File Name *</label>
+                        <input className="input-field" placeholder="e.g. ITR Form 26AS" value={attachForm.fileName} onChange={(e) => setAttachForm({ ...attachForm, fileName: e.target.value })} required />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-muted-foreground">Category</label>
+                        <select className="input-field" value={attachForm.tag} onChange={(e) => setAttachForm({ ...attachForm, tag: e.target.value })}>
+                          <option value="evidence">Evidence</option>
+                          <option value="proposal">Proposal</option>
+                          <option value="signed_doc">Signed Doc</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">URL *</label>
+                      <input className="input-field" placeholder="https://drive.google.com/..." value={attachForm.fileUrl} onChange={(e) => setAttachForm({ ...attachForm, fileUrl: e.target.value })} required />
+                    </div>
+                    <button type="submit" className="primary-button text-xs">Add Link</button>
                   </form>
                 </div>
               )}
 
               {/* Attachments List */}
               <div className="space-y-2">
+                {attachments.length > 0 && <div className="text-xs font-medium text-muted-foreground">{attachments.length} attachment{attachments.length !== 1 ? 's' : ''}</div>}
                 {attachments.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-md border border-border p-3">
                     <div className="min-w-0 flex-1">
@@ -525,7 +648,7 @@ function TaskDetailPanel({
                       </div>
                     </div>
                     {a.fileUrl && (
-                      <a href={a.fileUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-xs text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                      <a href={a.fileUrl} target="_blank" rel="noopener noreferrer" className="ml-2 rounded-md border border-border px-2 py-1 text-xs text-primary hover:bg-accent" onClick={(e) => e.stopPropagation()}>
                         {a.fileUrl.startsWith('data:') ? 'Download' : 'Open'}
                       </a>
                     )}
@@ -539,32 +662,55 @@ function TaskDetailPanel({
           {/* Efforts / Time Logs Tab */}
           {tab === 'efforts' && (
             <div className="space-y-4">
-              {/* Summary */}
-              <div className="flex items-center gap-4 rounded-md bg-accent/30 p-3">
-                <div><span className="text-xs text-muted-foreground">Total Effort</span><p className="text-lg font-semibold">{totalHours} hrs</p></div>
-                <div><span className="text-xs text-muted-foreground">Entries</span><p className="text-lg font-semibold">{timeLogs.length}</p></div>
-                <div><span className="text-xs text-muted-foreground">Billable</span><p className="text-lg font-semibold">{timeLogs.filter((t) => t.isBillable).length}</p></div>
+              {/* Summary Stats */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-md border border-border p-3 text-center">
+                  <p className="text-2xl font-bold text-primary">{totalHours}</p>
+                  <p className="text-xs text-muted-foreground">Total Hours</p>
+                </div>
+                <div className="rounded-md border border-border p-3 text-center">
+                  <p className="text-2xl font-bold">{timeLogs.length}</p>
+                  <p className="text-xs text-muted-foreground">Entries</p>
+                </div>
+                <div className="rounded-md border border-border p-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{timeLogs.filter((t) => t.isBillable).length}</p>
+                  <p className="text-xs text-muted-foreground">Billable</p>
+                </div>
               </div>
 
-              {/* Add Time Log */}
+              {/* Log Time Form */}
               {canLogTime && (
                 <>
                   {!showTimeForm ? (
-                    <button className="primary-button text-xs" onClick={() => setShowTimeForm(true)}>+ Log Time</button>
+                    <button className="primary-button text-xs w-full" onClick={() => setShowTimeForm(true)}>+ Log Time Entry</button>
                   ) : (
-                    <form onSubmit={handleTimeLog} className="space-y-3 rounded-md border border-border p-3">
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <div><label className="mb-1 block text-xs text-muted-foreground">Start Time *</label><input type="datetime-local" className="input-field" value={timeForm.startedAt} onChange={(e) => setTimeForm({ ...timeForm, startedAt: e.target.value })} required /></div>
-                        <div><label className="mb-1 block text-xs text-muted-foreground">End Time</label><input type="datetime-local" className="input-field" value={timeForm.endedAt} onChange={(e) => setTimeForm({ ...timeForm, endedAt: e.target.value })} /></div>
+                    <form onSubmit={handleTimeLog} className="space-y-3 rounded-md border border-primary/30 bg-primary/5 p-4">
+                      <div className="text-xs font-semibold text-foreground">Log Time</div>
+                      <div className="grid gap-3 grid-cols-3">
+                        <div>
+                          <label className="mb-1 block text-xs text-muted-foreground">Date *</label>
+                          <input type="date" className="input-field" value={timeForm.date} onChange={(e) => setTimeForm({ ...timeForm, date: e.target.value })} required />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-muted-foreground">Hours</label>
+                          <input type="number" min="0" max="23" className="input-field" placeholder="0" value={timeForm.hours} onChange={(e) => setTimeForm({ ...timeForm, hours: e.target.value })} />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs text-muted-foreground">Minutes</label>
+                          <input type="number" min="0" max="59" className="input-field" placeholder="0" value={timeForm.minutes} onChange={(e) => setTimeForm({ ...timeForm, minutes: e.target.value })} />
+                        </div>
                       </div>
-                      <div><label className="mb-1 block text-xs text-muted-foreground">Notes</label><input className="input-field" value={timeForm.notes} onChange={(e) => setTimeForm({ ...timeForm, notes: e.target.value })} placeholder="What did you work on?" /></div>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input type="checkbox" checked={timeForm.isBillable} onChange={(e) => setTimeForm({ ...timeForm, isBillable: e.target.checked })} />
-                        Billable
+                      <div>
+                        <label className="mb-1 block text-xs text-muted-foreground">Work Description</label>
+                        <input className="input-field" value={timeForm.notes} onChange={(e) => setTimeForm({ ...timeForm, notes: e.target.value })} placeholder="e.g. Reviewed ITR documents, prepared filing summary" />
+                      </div>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <input type="checkbox" className="rounded" checked={timeForm.isBillable} onChange={(e) => setTimeForm({ ...timeForm, isBillable: e.target.checked })} />
+                        Billable to client
                       </label>
                       <div className="flex gap-2">
-                        <button type="submit" className="primary-button text-xs">Save</button>
-                        <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => setShowTimeForm(false)}>Cancel</button>
+                        <button type="submit" className="primary-button text-xs">Save Entry</button>
+                        <button type="button" className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent" onClick={() => setShowTimeForm(false)}>Cancel</button>
                       </div>
                     </form>
                   )}
@@ -573,22 +719,22 @@ function TaskDetailPanel({
 
               {/* Time Logs List */}
               <div className="space-y-2">
+                {timeLogs.length > 0 && <div className="text-xs font-medium text-muted-foreground">Time Entries</div>}
                 {timeLogs.map((tl) => {
                   const dur = tl.durationMinutes ? `${Math.floor(tl.durationMinutes / 60)}h ${tl.durationMinutes % 60}m` : '—';
                   return (
                     <div key={tl.id} className="flex items-center justify-between rounded-md border border-border p-3">
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-medium">
                           <span>{userMap[tl.userId] || 'Unknown'}</span>
                           {tl.isBillable && <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] text-green-700 dark:bg-green-900/30 dark:text-green-300">Billable</span>}
                         </div>
                         <div className="mt-0.5 text-xs text-muted-foreground">
-                          {new Date(tl.startedAt).toLocaleString('en-IN')}
-                          {tl.endedAt && ` → ${new Date(tl.endedAt).toLocaleString('en-IN')}`}
+                          {new Date(tl.startedAt).toLocaleDateString('en-IN')}
                         </div>
-                        {tl.notes && <p className="mt-1 text-xs text-muted-foreground">{tl.notes}</p>}
+                        {tl.notes && <p className="mt-1 text-xs text-muted-foreground italic">{tl.notes}</p>}
                       </div>
-                      <span className="text-sm font-semibold">{dur}</span>
+                      <span className="ml-2 rounded-md bg-accent px-3 py-1.5 text-sm font-bold">{dur}</span>
                     </div>
                   );
                 })}

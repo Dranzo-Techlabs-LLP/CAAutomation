@@ -9,6 +9,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequestUser } from '../common/types/request-user';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskResponseDto } from './dto/task-response.dto';
 import { UpdateTaskResolutionDto } from './dto/update-task-resolution.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
@@ -47,6 +48,16 @@ export class TasksController {
     const result = await this.tasksService.create(user.firmId, dto, user.id);
     this.lifecycle?.onTaskCreated(result.id, user.firmId, user.id);
     return result;
+  }
+
+  @Patch(':id')
+  @Permissions('task.edit')
+  async update(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateTaskDto,
+  ): Promise<TaskResponseDto> {
+    return this.tasksService.update(user.firmId, id, dto, user.id);
   }
 
   @Patch(':id/status')
