@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
+/* ── Types ── */
 interface Task {
   id: string;
   title: string;
@@ -16,7 +17,11 @@ interface Task {
   resolution?: string;
   createdAt?: string;
 }
+interface Comment { id: string; userId: string; body: string; createdAt: string; }
+interface Attachment { id: string; fileName: string; fileUrl: string; mimeType: string; sizeBytes: string; tag: string; createdAt: string; uploadedByUserId: string; }
+interface TimeLogEntry { id: string; userId: string; startedAt: string; endedAt?: string; durationMinutes?: number; notes?: string; isBillable: boolean; }
 
+/* ── Constants ── */
 const STATUSES = ['unassigned', 'assigned', 'in_progress', 'on_hold', 'review', 'completed', 'cancelled'];
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
 
@@ -29,38 +34,27 @@ const STATUS_COLORS: Record<string, string> = {
   completed: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
 };
-
 const STATUS_HEADER_COLORS: Record<string, string> = {
-  unassigned: 'border-gray-300 dark:border-gray-600',
-  assigned: 'border-blue-400 dark:border-blue-500',
-  in_progress: 'border-amber-400 dark:border-amber-500',
-  on_hold: 'border-orange-400 dark:border-orange-500',
-  review: 'border-purple-400 dark:border-purple-500',
-  completed: 'border-green-500 dark:border-green-400',
+  unassigned: 'border-gray-300 dark:border-gray-600', assigned: 'border-blue-400 dark:border-blue-500',
+  in_progress: 'border-amber-400 dark:border-amber-500', on_hold: 'border-orange-400 dark:border-orange-500',
+  review: 'border-purple-400 dark:border-purple-500', completed: 'border-green-500 dark:border-green-400',
   cancelled: 'border-red-400 dark:border-red-500',
 };
-
-const PRIORITY_COLORS: Record<string, string> = {
-  low: 'text-gray-500',
-  medium: 'text-blue-600',
-  high: 'text-orange-600',
-  urgent: 'text-red-600 font-bold',
-};
-
-const PRIORITY_DOT: Record<string, string> = {
-  low: 'bg-gray-400',
-  medium: 'bg-blue-500',
-  high: 'bg-orange-500',
-  urgent: 'bg-red-500',
-};
+const PRIORITY_DOT: Record<string, string> = { low: 'bg-gray-400', medium: 'bg-blue-500', high: 'bg-orange-500', urgent: 'bg-red-500' };
+const PRIORITY_COLORS: Record<string, string> = { low: 'text-gray-500', medium: 'text-blue-600', high: 'text-orange-600', urgent: 'text-red-600 font-bold' };
 
 type ViewMode = 'list' | 'kanban';
+type DetailTab = 'details' | 'comments' | 'attachments' | 'efforts';
 
+/* ── Main Page ── */
 export default function TasksPage() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const canCreate = hasPermission('task.create');
   const canEdit = hasPermission('task.edit');
   const canViewAll = hasPermission('task.view');
+  const canComment = hasPermission('task.comment');
+  const canAttach = hasPermission('attachment.create');
+  const canLogTime = hasPermission('time_log.create');
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
@@ -70,34 +64,24 @@ export default function TasksPage() {
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState('all');
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [form, setForm] = useState({
-    title: '', customerId: '', serviceId: '', priority: 'medium',
-    description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '',
-  });
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', resolution: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     const base = canViewAll ? '/tasks' : '/tasks/my';
-    // Paginate through all tasks (API max 100 per page)
     const all: Task[] = [];
     let cursor: string | undefined;
     const fetchPage = async (): Promise<void> => {
       const url = cursor ? `${base}?limit=100&cursor=${cursor}` : `${base}?limit=100`;
       const r = await api<{ data: Task[]; nextCursor?: string }>(url);
       all.push(...(r.data || []));
-      if (r.nextCursor) {
-        cursor = r.nextCursor;
-        return fetchPage();
-      }
+      if (r.nextCursor) { cursor = r.nextCursor; return fetchPage(); }
     };
-    fetchPage()
-      .then(() => setTasks(all))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  };
+    fetchPage().then(() => setTasks(all)).catch(() => {}).finally(() => setLoading(false));
+  }, [canViewAll]);
 
   useEffect(() => {
     load();
@@ -105,18 +89,12 @@ export default function TasksPage() {
     api<{ id: string; name: string }[]>('/users').then(setUsers).catch(() => setUsers([]));
     api<{ id: string; name: string }[]>('/services-catalog').then(setServices).catch(() => {});
     api<{ id: string; name: string }[]>('/teams').then(setTeams).catch(() => setTeams([]));
-  }, [canViewAll]);
+  }, [load]);
 
-  const resetForm = () => {
-    setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '' });
-    setEditingTask(null);
-    setShowForm(false);
-    setError('');
-  };
+  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', resolution: '' }); setShowForm(false); setError(''); };
 
   const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+    e.preventDefault(); setError('');
     try {
       const body: Record<string, unknown> = { title: form.title, customerId: form.customerId, priority: form.priority };
       if (form.serviceId) body.serviceId = form.serviceId;
@@ -124,21 +102,20 @@ export default function TasksPage() {
       if (form.assignedToUserId) body.assignedToUserId = form.assignedToUserId;
       if (form.assignedTeamId) body.assignedTeamId = form.assignedTeamId;
       if (form.dueDate) body.dueDate = new Date(form.dueDate).toISOString();
+      if (form.resolution) body.resolution = form.resolution;
       await api('/tasks', { method: 'POST', body: JSON.stringify(body) });
-      resetForm();
-      load();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to create task');
-    }
+      resetForm(); load();
+    } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to create task'); }
   };
 
   const updateStatus = async (taskId: string, status: string) => {
-    try {
-      await api(`/tasks/${taskId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
-      load();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to update status');
-    }
+    try { await api(`/tasks/${taskId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }); load(); }
+    catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
+  };
+
+  const updateResolution = async (taskId: string, resolution: string) => {
+    try { await api(`/tasks/${taskId}/resolution`, { method: 'PATCH', body: JSON.stringify({ resolution }) }); load(); }
+    catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
   };
 
   const customerMap = Object.fromEntries(customers.map((c) => [c.id, c.name]));
@@ -154,35 +131,17 @@ export default function TasksPage() {
           <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-muted-foreground">{tasks.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* View toggle */}
           <div className="flex rounded-md border border-border">
-            <button
-              className={`px-3 py-1.5 text-xs ${viewMode === 'kanban' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-l-md`}
-              onClick={() => setViewMode('kanban')}
-            >
-              Board
-            </button>
-            <button
-              className={`px-3 py-1.5 text-xs ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-r-md`}
-              onClick={() => setViewMode('list')}
-            >
-              List
-            </button>
+            <button className={`px-3 py-1.5 text-xs ${viewMode === 'kanban' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-l-md`} onClick={() => setViewMode('kanban')}>Board</button>
+            <button className={`px-3 py-1.5 text-xs ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-r-md`} onClick={() => setViewMode('list')}>List</button>
           </div>
           {viewMode === 'list' && (
             <select className="input-field text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
               <option value="all">All ({tasks.length})</option>
-              {STATUSES.map((s) => {
-                const count = tasks.filter((t) => t.status === s).length;
-                return <option key={s} value={s}>{s.replace(/_/g, ' ')} ({count})</option>;
-              })}
+              {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')} ({tasks.filter((t) => t.status === s).length})</option>)}
             </select>
           )}
-          {canCreate && (
-            <button className="primary-button" onClick={() => { showForm ? resetForm() : setShowForm(true); }}>
-              {showForm ? 'Cancel' : '+ New Task'}
-            </button>
-          )}
+          {canCreate && <button className="primary-button" onClick={() => showForm ? resetForm() : setShowForm(true)}>{showForm ? 'Cancel' : '+ New Task'}</button>}
         </div>
       </div>
 
@@ -192,95 +151,48 @@ export default function TasksPage() {
           <div className="panel-title">Create New Task</div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Title *</label>
-              <input className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required placeholder="Task title" />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Customer *</label>
-              <select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required>
-                <option value="">Select customer...</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Service</label>
-              <select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}>
-                <option value="">None</option>
-                {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Priority</label>
-              <select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to User</label>
-              <select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}>
-                <option value="">Unassigned</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to Team</label>
-              <select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}>
-                <option value="">None</option>
-                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</label>
-              <input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-            </div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Title *</label><input className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Customer *</label><select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required><option value="">Select...</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Service</label><select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}><option value="">None</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Priority</label><select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}</select></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to User</label><select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to Team</label><select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}><option value="">None</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</label><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label>
-            <textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Optional description..." />
-          </div>
+          <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+          <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>
           <button type="submit" className="primary-button">Create Task</button>
         </form>
       )}
 
-      {/* Loading */}
       {loading && <div className="py-8 text-center text-muted-foreground">Loading tasks...</div>}
 
-      {/* Kanban Board */}
+      {/* Kanban */}
       {!loading && viewMode === 'kanban' && (
         <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: '60vh' }}>
           {STATUSES.map((status) => {
-            const columnTasks = tasks.filter((t) => t.status === status);
+            const col = tasks.filter((t) => t.status === status);
             return (
               <div key={status} className="flex w-72 min-w-[18rem] flex-shrink-0 flex-col rounded-lg bg-accent/30 dark:bg-accent/10">
-                {/* Column Header */}
-                <div className={`flex items-center justify-between border-b-2 ${STATUS_HEADER_COLORS[status] || 'border-gray-300'} px-3 py-2.5`}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide">{status.replace(/_/g, ' ')}</span>
-                  </div>
-                  <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                    {columnTasks.length}
-                  </span>
+                <div className={`flex items-center justify-between border-b-2 ${STATUS_HEADER_COLORS[status] || ''} px-3 py-2.5`}>
+                  <span className="text-xs font-semibold uppercase tracking-wide">{status.replace(/_/g, ' ')}</span>
+                  <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">{col.length}</span>
                 </div>
-
-                {/* Cards */}
                 <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ maxHeight: 'calc(60vh - 48px)' }}>
-                  {columnTasks.map((task) => (
-                    <KanbanCard
-                      key={task.id}
-                      task={task}
-                      customerMap={customerMap}
-                      userMap={userMap}
-                      canEdit={canEdit}
-                      onStatusChange={updateStatus}
-                      onViewDetails={setEditingTask}
-                    />
-                  ))}
-                  {columnTasks.length === 0 && (
-                    <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
-                      No tasks
+                  {col.map((task) => (
+                    <div key={task.id} className="cursor-pointer rounded-md border border-border bg-background p-3 shadow-sm transition-all hover:shadow-md" onClick={() => setSelectedTask(task)}>
+                      <div className="mb-2 flex items-start justify-between gap-1">
+                        <h4 className="text-sm font-medium leading-tight">{task.title}</h4>
+                        <span className={`mt-0.5 inline-block h-2 w-2 flex-shrink-0 rounded-full ${PRIORITY_DOT[task.priority] || 'bg-gray-400'}`} title={task.priority} />
+                      </div>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div className="truncate">{customerMap[task.customerId] || 'Unknown'}</div>
+                        {task.assignedToUserId && <div className="truncate font-medium text-foreground">{userMap[task.assignedToUserId] || ''}</div>}
+                        {task.dueDate && <div className={task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600 font-medium' : ''}>Due: {new Date(task.dueDate).toLocaleDateString('en-IN')}</div>}
+                      </div>
                     </div>
-                  )}
+                  ))}
+                  {col.length === 0 && <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">No tasks</div>}
                 </div>
               </div>
             );
@@ -288,220 +200,400 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* List View */}
+      {/* List */}
       {!loading && viewMode === 'list' && (
         <div className="space-y-2">
           {filtered.map((task) => (
-            <div
-              key={task.id}
-              className="panel flex cursor-pointer flex-col gap-2 transition-colors hover:bg-accent/50 sm:flex-row sm:items-center sm:justify-between"
-              onClick={() => setEditingTask(task)}
-            >
+            <div key={task.id} className="panel flex cursor-pointer flex-col gap-2 transition-colors hover:bg-accent/50 sm:flex-row sm:items-center sm:justify-between" onClick={() => setSelectedTask(task)}>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2 w-2 rounded-full ${PRIORITY_DOT[task.priority] || 'bg-gray-400'}`} />
+                  <span className={`inline-block h-2 w-2 rounded-full ${PRIORITY_DOT[task.priority] || ''}`} />
                   <span className={`text-xs font-semibold uppercase ${PRIORITY_COLORS[task.priority] || ''}`}>{task.priority}</span>
                   <h3 className="truncate text-sm font-medium">{task.title}</h3>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                   <span>{customerMap[task.customerId] || 'Unknown'}</span>
-                  {task.assignedToUserId && <span>Assigned: {userMap[task.assignedToUserId] || 'Unknown'}</span>}
-                  {task.dueDate && (
-                    <span className={new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600 font-medium' : ''}>
-                      Due: {new Date(task.dueDate).toLocaleDateString('en-IN')}
-                    </span>
-                  )}
-                  {task.generatedBy !== 'manual' && <span className="rounded bg-accent px-1">{task.generatedBy}</span>}
+                  {task.assignedToUserId && <span>Assigned: {userMap[task.assignedToUserId] || ''}</span>}
+                  {task.dueDate && <span className={new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600 font-medium' : ''}>Due: {new Date(task.dueDate).toLocaleDateString('en-IN')}</span>}
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[task.status] || 'bg-accent'}`}>
-                  {task.status.replace(/_/g, ' ')}
-                </span>
-                {canEdit && (
-                  <select
-                    className="input-field text-xs"
-                    value={task.status}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => updateStatus(task.id, e.target.value)}
-                  >
-                    {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-                  </select>
-                )}
+                <span className={`rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[task.status] || 'bg-accent'}`}>{task.status.replace(/_/g, ' ')}</span>
+                {canEdit && <select className="input-field text-xs" value={task.status} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStatus(task.id, e.target.value)}>{STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select>}
               </div>
             </div>
           ))}
-          {filtered.length === 0 && (
-            <div className="panel py-8 text-center text-muted-foreground">No tasks found</div>
-          )}
+          {filtered.length === 0 && <div className="panel py-8 text-center text-muted-foreground">No tasks found</div>}
         </div>
       )}
 
-      {/* Task Detail Modal */}
-      {editingTask && (
-        <TaskDetailModal
-          task={editingTask}
+      {/* Task Detail Panel */}
+      {selectedTask && (
+        <TaskDetailPanel
+          task={selectedTask}
           customerMap={customerMap}
           userMap={userMap}
+          users={users}
           canEdit={canEdit}
-          statuses={STATUSES}
-          onStatusChange={(status) => { updateStatus(editingTask.id, status); setEditingTask(null); }}
-          onClose={() => setEditingTask(null)}
+          canComment={canComment}
+          canAttach={canAttach}
+          canLogTime={canLogTime}
+          currentUserId={user?.id || ''}
+          onStatusChange={(s) => { updateStatus(selectedTask.id, s); setSelectedTask({ ...selectedTask, status: s }); }}
+          onResolutionChange={(r) => { updateResolution(selectedTask.id, r); setSelectedTask({ ...selectedTask, resolution: r }); }}
+          onClose={() => { setSelectedTask(null); load(); }}
         />
       )}
     </section>
   );
 }
 
-function KanbanCard({
-  task, customerMap, userMap, canEdit, onStatusChange, onViewDetails,
+/* ── Task Detail Panel (modal) ── */
+function TaskDetailPanel({
+  task, customerMap, userMap, users, canEdit, canComment, canAttach, canLogTime, currentUserId,
+  onStatusChange, onResolutionChange, onClose,
 }: {
-  task: Task;
-  customerMap: Record<string, string>;
-  userMap: Record<string, string>;
-  canEdit: boolean;
-  onStatusChange: (id: string, status: string) => void;
-  onViewDetails: (t: Task) => void;
+  task: Task; customerMap: Record<string, string>; userMap: Record<string, string>;
+  users: { id: string; name: string }[];
+  canEdit: boolean; canComment: boolean; canAttach: boolean; canLogTime: boolean; currentUserId: string;
+  onStatusChange: (s: string) => void; onResolutionChange: (r: string) => void; onClose: () => void;
 }) {
-  const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && task.status !== 'completed';
+  const [tab, setTab] = useState<DetailTab>('details');
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [resolution, setResolution] = useState(task.resolution || '');
+  const [editingResolution, setEditingResolution] = useState(false);
+
+  // Attachment form
+  const [attachForm, setAttachForm] = useState({ fileName: '', fileUrl: '', tag: 'other' });
+
+  // Time log form
+  const [timeForm, setTimeForm] = useState({ startedAt: '', endedAt: '', notes: '', isBillable: true });
+  const [showTimeForm, setShowTimeForm] = useState(false);
+
+  const loadComments = () => api<Comment[]>(`/tasks/${task.id}/comments`).then(setComments).catch(() => {});
+  const loadAttachments = () => api<Attachment[]>(`/attachments/task/${task.id}`).then(setAttachments).catch(() => {});
+  const loadTimeLogs = () => api<TimeLogEntry[]>(`/time-logs/task/${task.id}`).then(setTimeLogs).catch(() => {});
+
+  useEffect(() => {
+    loadComments();
+    loadAttachments();
+    loadTimeLogs();
+  }, [task.id]);
+
+  const handleComment = async () => {
+    if (!commentText.trim()) return;
+    try {
+      await api(`/tasks/${task.id}/comments`, { method: 'POST', body: JSON.stringify({ body: commentText }) });
+      setCommentText('');
+      loadComments();
+    } catch {}
+  };
+
+  const handleAttach = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api('/attachments', {
+        method: 'POST',
+        body: JSON.stringify({
+          entityType: 'task', entityId: task.id,
+          fileName: attachForm.fileName, fileUrl: attachForm.fileUrl,
+          mimeType: 'application/octet-stream', sizeBytes: '0', tag: attachForm.tag,
+        }),
+      });
+      setAttachForm({ fileName: '', fileUrl: '', tag: 'other' });
+      loadAttachments();
+    } catch {}
+  };
+
+  const handleAttachFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      try {
+        await api('/attachments', {
+          method: 'POST',
+          body: JSON.stringify({
+            entityType: 'task', entityId: task.id,
+            fileName: file.name, fileUrl: dataUrl,
+            mimeType: file.type || 'application/octet-stream',
+            sizeBytes: String(file.size), tag: 'other',
+          }),
+        });
+        loadAttachments();
+      } catch {}
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleTimeLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api('/time-logs', {
+        method: 'POST',
+        body: JSON.stringify({
+          taskId: task.id,
+          startedAt: new Date(timeForm.startedAt).toISOString(),
+          endedAt: timeForm.endedAt ? new Date(timeForm.endedAt).toISOString() : undefined,
+          notes: timeForm.notes || undefined,
+          isBillable: timeForm.isBillable,
+        }),
+      });
+      setTimeForm({ startedAt: '', endedAt: '', notes: '', isBillable: true });
+      setShowTimeForm(false);
+      loadTimeLogs();
+    } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
+  };
+
+  const saveResolution = () => {
+    onResolutionChange(resolution);
+    setEditingResolution(false);
+  };
+
+  const totalMinutes = timeLogs.reduce((s, t) => s + (t.durationMinutes || 0), 0);
+  const totalHours = (totalMinutes / 60).toFixed(1);
+
+  const tabs: { key: DetailTab; label: string; count?: number }[] = [
+    { key: 'details', label: 'Details' },
+    { key: 'comments', label: 'Discussion', count: comments.length },
+    { key: 'attachments', label: 'Attachments', count: attachments.length },
+    { key: 'efforts', label: 'Efforts', count: timeLogs.length },
+  ];
 
   return (
-    <div
-      className="cursor-pointer rounded-md border border-border bg-background p-3 shadow-sm transition-all hover:shadow-md"
-      onClick={() => onViewDetails(task)}
-    >
-      <div className="mb-2 flex items-start justify-between gap-1">
-        <h4 className="text-sm font-medium leading-tight">{task.title}</h4>
-        <span className={`mt-0.5 inline-block h-2 w-2 flex-shrink-0 rounded-full ${PRIORITY_DOT[task.priority] || 'bg-gray-400'}`}
-          title={task.priority} />
-      </div>
-
-      <div className="space-y-1.5 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1">
-          <span className="text-muted-foreground/70">Customer:</span>
-          <span className="truncate">{customerMap[task.customerId] || 'Unknown'}</span>
-        </div>
-
-        {task.assignedToUserId && (
-          <div className="flex items-center gap-1">
-            <span className="text-muted-foreground/70">Assignee:</span>
-            <span className="truncate font-medium text-foreground">{userMap[task.assignedToUserId] || 'Unknown'}</span>
-          </div>
-        )}
-
-        {task.dueDate && (
-          <div className={`flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : ''}`}>
-            <span className={isOverdue ? '' : 'text-muted-foreground/70'}>Due:</span>
-            <span>{new Date(task.dueDate).toLocaleDateString('en-IN')}</span>
-            {isOverdue && <span className="ml-1 text-[10px]">OVERDUE</span>}
-          </div>
-        )}
-
-        {task.resolution && (
-          <div className="flex items-center gap-1">
-            <span className="text-muted-foreground/70">Resolution:</span>
-            <span className="truncate">{task.resolution}</span>
-          </div>
-        )}
-      </div>
-
-      {canEdit && (
-        <div className="mt-2 border-t border-border pt-2">
-          <select
-            className="input-field w-full text-xs"
-            value={task.status}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => { e.stopPropagation(); onStatusChange(task.id, e.target.value); }}
-          >
-            {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-          </select>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TaskDetailModal({
-  task, customerMap, userMap, canEdit, statuses, onStatusChange, onClose,
-}: {
-  task: Task;
-  customerMap: Record<string, string>;
-  userMap: Record<string, string>;
-  canEdit: boolean;
-  statuses: string[];
-  onStatusChange: (status: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-lg border border-border bg-background p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-start justify-between">
-          <div>
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/50" onClick={onClose}>
+      <div className="flex h-full w-full max-w-2xl flex-col bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between border-b border-border p-4">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className={`inline-block h-2.5 w-2.5 rounded-full ${PRIORITY_DOT[task.priority] || 'bg-gray-400'}`} />
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${PRIORITY_DOT[task.priority] || ''}`} />
               <span className={`text-xs font-semibold uppercase ${PRIORITY_COLORS[task.priority] || ''}`}>{task.priority}</span>
-              <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[task.status] || 'bg-accent'}`}>
-                {task.status.replace(/_/g, ' ')}
-              </span>
+              <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[task.status] || 'bg-accent'}`}>{task.status.replace(/_/g, ' ')}</span>
             </div>
-            <h3 className="mt-2 text-lg font-semibold">{task.title}</h3>
+            <h3 className="mt-1 text-lg font-semibold">{task.title}</h3>
+            <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+              <span>{customerMap[task.customerId] || 'Unknown'}</span>
+              {task.assignedToUserId && <span>Assigned: {userMap[task.assignedToUserId] || ''}</span>}
+              {task.dueDate && <span>Due: {new Date(task.dueDate).toLocaleDateString('en-IN')}</span>}
+              {task.createdAt && <span>Created: {new Date(task.createdAt).toLocaleDateString('en-IN')}</span>}
+            </div>
           </div>
-          <button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground">
+          <button onClick={onClose} className="ml-2 rounded p-1 text-muted-foreground hover:bg-accent">
             <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
 
-        <div className="space-y-3 text-sm">
-          {task.description && (
-            <div>
-              <span className="text-xs font-medium text-muted-foreground">Description</span>
-              <p className="mt-0.5">{task.description}</p>
+        {/* Tabs */}
+        <div className="flex border-b border-border">
+          {tabs.map((t) => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors ${tab === t.key ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+              {t.label}
+              {t.count !== undefined && t.count > 0 && <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px]">{t.count}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {/* Details Tab */}
+          {tab === 'details' && (
+            <div className="space-y-4">
+              {task.description && (
+                <div><span className="text-xs font-medium text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap">{task.description}</p></div>
+              )}
+
+              {/* Status Change */}
+              {canEdit && (
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
+                  <select className="input-field" value={task.status} onChange={(e) => onStatusChange(e.target.value)}>
+                    {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Resolution */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">Resolution</span>
+                  {canEdit && !editingResolution && (
+                    <button className="text-xs text-primary hover:underline" onClick={() => setEditingResolution(true)}>
+                      {task.resolution ? 'Edit' : 'Add Resolution'}
+                    </button>
+                  )}
+                </div>
+                {editingResolution ? (
+                  <div className="mt-1 space-y-2">
+                    <textarea className="input-field" rows={3} value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="Describe the resolution..." />
+                    <div className="flex gap-2">
+                      <button className="primary-button text-xs" onClick={saveResolution}>Save</button>
+                      <button className="text-xs text-muted-foreground hover:underline" onClick={() => { setEditingResolution(false); setResolution(task.resolution || ''); }}>Cancel</button>
+                    </div>
+                  </div>
+                ) : task.resolution ? (
+                  <p className="mt-1 rounded-md bg-accent/30 p-2 text-sm whitespace-pre-wrap">{task.resolution}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground italic">No resolution yet</p>
+                )}
+              </div>
+
+              {/* Info Grid */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div><span className="text-xs font-medium text-muted-foreground">Customer</span><p className="mt-0.5">{customerMap[task.customerId] || '-'}</p></div>
+                <div><span className="text-xs font-medium text-muted-foreground">Assignee</span><p className="mt-0.5">{task.assignedToUserId ? (userMap[task.assignedToUserId] || '-') : 'Unassigned'}</p></div>
+                <div><span className="text-xs font-medium text-muted-foreground">Generated By</span><p className="mt-0.5 capitalize">{task.generatedBy}</p></div>
+                <div><span className="text-xs font-medium text-muted-foreground">Total Effort</span><p className="mt-0.5">{totalHours} hrs ({timeLogs.length} entries)</p></div>
+              </div>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <span className="text-xs font-medium text-muted-foreground">Customer</span>
-              <p className="mt-0.5">{customerMap[task.customerId] || 'Unknown'}</p>
-            </div>
-            <div>
-              <span className="text-xs font-medium text-muted-foreground">Assignee</span>
-              <p className="mt-0.5">{task.assignedToUserId ? (userMap[task.assignedToUserId] || 'Unknown') : 'Unassigned'}</p>
-            </div>
-            {task.dueDate && (
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">Due Date</span>
-                <p className="mt-0.5">{new Date(task.dueDate).toLocaleDateString('en-IN')}</p>
-              </div>
-            )}
-            <div>
-              <span className="text-xs font-medium text-muted-foreground">Generated By</span>
-              <p className="mt-0.5 capitalize">{task.generatedBy}</p>
-            </div>
-            {task.resolution && (
-              <div className="col-span-2">
-                <span className="text-xs font-medium text-muted-foreground">Resolution</span>
-                <p className="mt-0.5">{task.resolution}</p>
-              </div>
-            )}
-            {task.createdAt && (
-              <div>
-                <span className="text-xs font-medium text-muted-foreground">Created</span>
-                <p className="mt-0.5">{new Date(task.createdAt).toLocaleString('en-IN')}</p>
-              </div>
-            )}
-          </div>
+          {/* Comments/Discussion Tab */}
+          {tab === 'comments' && (
+            <div className="space-y-4">
+              {/* Comment Input */}
+              {canComment && (
+                <div className="space-y-2">
+                  <textarea className="input-field" rows={3} value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="Write a comment or update..." />
+                  <button className="primary-button text-xs" disabled={!commentText.trim()} onClick={handleComment}>Post Comment</button>
+                </div>
+              )}
 
-          {canEdit && (
-            <div className="border-t border-border pt-3">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Change Status</label>
-              <select
-                className="input-field"
-                value={task.status}
-                onChange={(e) => onStatusChange(e.target.value)}
-              >
-                {statuses.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
-              </select>
+              {/* Comments List */}
+              <div className="space-y-3">
+                {comments.map((c) => (
+                  <div key={c.id} className="rounded-md border border-border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold">{userMap[c.userId] || 'Unknown'}</span>
+                      <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString('en-IN')}</span>
+                    </div>
+                    <p className="mt-1 text-sm whitespace-pre-wrap">{c.body}</p>
+                  </div>
+                ))}
+                {comments.length === 0 && <p className="py-6 text-center text-xs text-muted-foreground">No comments yet. Start a discussion!</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Attachments Tab */}
+          {tab === 'attachments' && (
+            <div className="space-y-4">
+              {canAttach && (
+                <div className="space-y-3">
+                  {/* File Upload */}
+                  <div>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-accent">
+                      <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+                      Upload File
+                      <input type="file" className="hidden" onChange={handleAttachFile} />
+                    </label>
+                  </div>
+
+                  {/* URL Attachment */}
+                  <form onSubmit={handleAttach} className="flex gap-2">
+                    <input className="input-field flex-1" placeholder="File name" value={attachForm.fileName} onChange={(e) => setAttachForm({ ...attachForm, fileName: e.target.value })} required />
+                    <input className="input-field flex-1" placeholder="File URL" value={attachForm.fileUrl} onChange={(e) => setAttachForm({ ...attachForm, fileUrl: e.target.value })} required />
+                    <select className="input-field w-28" value={attachForm.tag} onChange={(e) => setAttachForm({ ...attachForm, tag: e.target.value })}>
+                      <option value="evidence">Evidence</option>
+                      <option value="proposal">Proposal</option>
+                      <option value="signed_doc">Signed Doc</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <button type="submit" className="primary-button text-xs whitespace-nowrap">Add Link</button>
+                  </form>
+                </div>
+              )}
+
+              {/* Attachments List */}
+              <div className="space-y-2">
+                {attachments.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between rounded-md border border-border p-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <svg className="h-4 w-4 flex-shrink-0 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14,2 14,8 20,8" /></svg>
+                        <span className="truncate text-sm font-medium">{a.fileName}</span>
+                        <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">{a.tag}</span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {userMap[a.uploadedByUserId] || ''} · {new Date(a.createdAt).toLocaleDateString('en-IN')}
+                        {Number(a.sizeBytes) > 0 && ` · ${(Number(a.sizeBytes) / 1024).toFixed(1)} KB`}
+                      </div>
+                    </div>
+                    {a.fileUrl && (
+                      <a href={a.fileUrl} target="_blank" rel="noopener noreferrer" className="ml-2 text-xs text-primary hover:underline" onClick={(e) => e.stopPropagation()}>
+                        {a.fileUrl.startsWith('data:') ? 'Download' : 'Open'}
+                      </a>
+                    )}
+                  </div>
+                ))}
+                {attachments.length === 0 && <p className="py-6 text-center text-xs text-muted-foreground">No attachments yet</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Efforts / Time Logs Tab */}
+          {tab === 'efforts' && (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="flex items-center gap-4 rounded-md bg-accent/30 p-3">
+                <div><span className="text-xs text-muted-foreground">Total Effort</span><p className="text-lg font-semibold">{totalHours} hrs</p></div>
+                <div><span className="text-xs text-muted-foreground">Entries</span><p className="text-lg font-semibold">{timeLogs.length}</p></div>
+                <div><span className="text-xs text-muted-foreground">Billable</span><p className="text-lg font-semibold">{timeLogs.filter((t) => t.isBillable).length}</p></div>
+              </div>
+
+              {/* Add Time Log */}
+              {canLogTime && (
+                <>
+                  {!showTimeForm ? (
+                    <button className="primary-button text-xs" onClick={() => setShowTimeForm(true)}>+ Log Time</button>
+                  ) : (
+                    <form onSubmit={handleTimeLog} className="space-y-3 rounded-md border border-border p-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div><label className="mb-1 block text-xs text-muted-foreground">Start Time *</label><input type="datetime-local" className="input-field" value={timeForm.startedAt} onChange={(e) => setTimeForm({ ...timeForm, startedAt: e.target.value })} required /></div>
+                        <div><label className="mb-1 block text-xs text-muted-foreground">End Time</label><input type="datetime-local" className="input-field" value={timeForm.endedAt} onChange={(e) => setTimeForm({ ...timeForm, endedAt: e.target.value })} /></div>
+                      </div>
+                      <div><label className="mb-1 block text-xs text-muted-foreground">Notes</label><input className="input-field" value={timeForm.notes} onChange={(e) => setTimeForm({ ...timeForm, notes: e.target.value })} placeholder="What did you work on?" /></div>
+                      <label className="flex items-center gap-2 text-xs">
+                        <input type="checkbox" checked={timeForm.isBillable} onChange={(e) => setTimeForm({ ...timeForm, isBillable: e.target.checked })} />
+                        Billable
+                      </label>
+                      <div className="flex gap-2">
+                        <button type="submit" className="primary-button text-xs">Save</button>
+                        <button type="button" className="text-xs text-muted-foreground hover:underline" onClick={() => setShowTimeForm(false)}>Cancel</button>
+                      </div>
+                    </form>
+                  )}
+                </>
+              )}
+
+              {/* Time Logs List */}
+              <div className="space-y-2">
+                {timeLogs.map((tl) => {
+                  const dur = tl.durationMinutes ? `${Math.floor(tl.durationMinutes / 60)}h ${tl.durationMinutes % 60}m` : '—';
+                  return (
+                    <div key={tl.id} className="flex items-center justify-between rounded-md border border-border p-3">
+                      <div>
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <span>{userMap[tl.userId] || 'Unknown'}</span>
+                          {tl.isBillable && <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] text-green-700 dark:bg-green-900/30 dark:text-green-300">Billable</span>}
+                        </div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">
+                          {new Date(tl.startedAt).toLocaleString('en-IN')}
+                          {tl.endedAt && ` → ${new Date(tl.endedAt).toLocaleString('en-IN')}`}
+                        </div>
+                        {tl.notes && <p className="mt-1 text-xs text-muted-foreground">{tl.notes}</p>}
+                      </div>
+                      <span className="text-sm font-semibold">{dur}</span>
+                    </div>
+                  );
+                })}
+                {timeLogs.length === 0 && <p className="py-6 text-center text-xs text-muted-foreground">No time entries logged yet</p>}
+              </div>
             </div>
           )}
         </div>

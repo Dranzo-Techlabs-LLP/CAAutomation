@@ -132,8 +132,16 @@ async function seed() {
     'dashboard.associate',
     'dashboard.compliance_calendar',
   ]);
-  await assignPermissions(seniorAssociate, ['customer.view', 'task.view', 'task.edit', 'task.comment', 'dashboard.associate']);
-  await assignPermissions(associate, ['customer.view', 'task.view', 'task.edit', 'task.comment', 'dashboard.associate']);
+  await assignPermissions(seniorAssociate, [
+    'customer.view', 'task.view', 'task.create', 'task.edit', 'task.comment',
+    'attachment.view', 'attachment.create', 'time_log.view', 'time_log.create',
+    'dashboard.associate',
+  ]);
+  await assignPermissions(associate, [
+    'customer.view', 'task.view', 'task.create', 'task.edit', 'task.comment',
+    'attachment.view', 'attachment.create', 'time_log.view', 'time_log.create',
+    'dashboard.associate',
+  ]);
 
   const passwordHash = await bcrypt.hash('DemoPassword123!', 12);
   const users = await Promise.all(
