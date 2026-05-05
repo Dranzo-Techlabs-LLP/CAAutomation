@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Optional, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Inject, Optional, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { TaskLifecycleService } from '../automation-rules/task-lifecycle.service';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
@@ -70,6 +70,13 @@ export class TasksController {
     const result = await this.tasksService.updateStatus(user.firmId, id, dto.status, user.id);
     this.lifecycle?.onTaskStatusChanged(result.id, user.firmId, user.id);
     return result;
+  }
+
+  @Delete(':id')
+  @Permissions('task.edit')
+  async delete(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ deleted: boolean }> {
+    await this.tasksService.delete(user.firmId, id);
+    return { deleted: true };
   }
 
   @Patch(':id/resolution')

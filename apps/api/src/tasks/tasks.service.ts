@@ -22,6 +22,9 @@ export class TasksService {
       ...dto,
       firmId,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+      staffDueDate: dto.staffDueDate ? new Date(dto.staffDueDate) : null,
+      reviewDate: dto.reviewDate ? new Date(dto.reviewDate) : null,
+      clientDueDate: dto.clientDueDate ? new Date(dto.clientDueDate) : null,
       status: assigned ? TaskStatus.Assigned : TaskStatus.Unassigned,
       generatedBy: dto.generatedBy,
       createdBy: actorUserId,
@@ -82,9 +85,17 @@ export class TasksService {
     if (dto.assignedToUserId !== undefined) task.assignedToUserId = dto.assignedToUserId;
     if (dto.assignedTeamId !== undefined) task.assignedTeamId = dto.assignedTeamId;
     if (dto.dueDate !== undefined) task.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
+    if (dto.staffDueDate !== undefined) task.staffDueDate = dto.staffDueDate ? new Date(dto.staffDueDate) : null;
+    if (dto.reviewDate !== undefined) task.reviewDate = dto.reviewDate ? new Date(dto.reviewDate) : null;
+    if (dto.clientDueDate !== undefined) task.clientDueDate = dto.clientDueDate ? new Date(dto.clientDueDate) : null;
     if (dto.resolution !== undefined) task.resolution = dto.resolution;
     task.updatedBy = actorUserId;
     return this.toResponse(await this.taskRepository.save(task));
+  }
+
+  async delete(firmId: string, id: string): Promise<void> {
+    const task = await this.getEntityOrFail(firmId, id);
+    await this.taskRepository.remove(task);
   }
 
   async updateStatus(firmId: string, id: string, status: TaskStatus, actorUserId: string): Promise<TaskResponseDto> {
@@ -141,6 +152,9 @@ export class TasksService {
       assignedToUserId: task.assignedToUserId,
       assignedTeamId: task.assignedTeamId,
       dueDate: task.dueDate,
+      staffDueDate: task.staffDueDate,
+      reviewDate: task.reviewDate,
+      clientDueDate: task.clientDueDate,
       generatedBy: task.generatedBy,
       workflowId: task.workflowId,
       currentStepId: task.currentStepId,

@@ -35,6 +35,21 @@ export class UpdateTaskDto {
 
   @ApiPropertyOptional()
   @IsOptional()
+  @IsISO8601()
+  staffDueDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsISO8601()
+  reviewDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsISO8601()
+  clientDueDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
   resolution?: string;
 }

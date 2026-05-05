@@ -38,6 +38,15 @@ export class TaskResponseDto {
   @ApiPropertyOptional()
   dueDate?: Date | null;
 
+  @ApiPropertyOptional()
+  staffDueDate?: Date | null;
+
+  @ApiPropertyOptional()
+  reviewDate?: Date | null;
+
+  @ApiPropertyOptional()
+  clientDueDate?: Date | null;
+
   @ApiProperty({ enum: TaskGeneratedBy })
   generatedBy!: TaskGeneratedBy;
 

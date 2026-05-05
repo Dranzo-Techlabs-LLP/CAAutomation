@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -30,6 +30,23 @@ export class TeamsService {
       order: { name: 'ASC' },
     });
     return teams.map((team) => this.toResponse(team));
+  }
+
+  async update(firmId: string, id: string, dto: Partial<CreateTeamDto>, actorUserId: string): Promise<TeamResponseDto> {
+    const team = await this.teamRepository.findOne({ where: { firmId, id } });
+    if (!team) throw new NotFoundException('Team not found');
+    if (dto.name !== undefined) team.name = dto.name;
+    if (dto.description !== undefined) team.description = dto.description;
+    if (dto.leadUserId !== undefined) team.leadUserId = dto.leadUserId;
+    team.updatedBy = actorUserId;
+    return this.toResponse(await this.teamRepository.save(team));
+  }
+
+  async delete(firmId: string, id: string): Promise<void> {
+    const team = await this.teamRepository.findOne({ where: { firmId, id } });
+    if (!team) throw new NotFoundException('Team not found');
+    team.isActive = false;
+    await this.teamRepository.save(team);
   }
 
   private toResponse(team: Team): TeamResponseDto {

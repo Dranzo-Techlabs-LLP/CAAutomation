@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -26,5 +26,18 @@ export class ServicesCatalogController {
   @Permissions('service.create')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateServiceCatalogDto): Promise<ServiceCatalog> {
     return this.servicesCatalogService.create(user.firmId, dto, user.id);
+  }
+
+  @Patch(':id')
+  @Permissions('service.create')
+  async update(@CurrentUser() user: RequestUser, @Param('id') id: string, @Body() dto: Partial<CreateServiceCatalogDto>): Promise<ServiceCatalog> {
+    return this.servicesCatalogService.update(user.firmId, id, dto, user.id);
+  }
+
+  @Delete(':id')
+  @Permissions('service.create')
+  async delete(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ deleted: boolean }> {
+    await this.servicesCatalogService.delete(user.firmId, id);
+    return { deleted: true };
   }
 }

@@ -19,4 +19,24 @@ export class CreateEnquiryDto {
   @ApiPropertyOptional()
   @IsOptional()
   requirementsJson?: Record<string, unknown>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  referralName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  referralContact?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  referralDetails?: string;
 }

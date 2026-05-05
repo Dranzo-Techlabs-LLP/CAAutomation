@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -11,27 +12,73 @@ interface Service {
   defaultAssigneeStrategy?: string;
 }
 
+const RECURRENCES = ['none', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom'];
+
 export default function ServicesPage() {
   const { hasPermission } = useAuth();
   const canCreate = hasPermission('service.create');
   const [services, setServices] = useState<Service[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
   const [form, setForm] = useState({ code: '', name: '', defaultBillingAmount: '', recurrenceDefault: 'none' });
   const [error, setError] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const load = () => api<Service[]>('/services-catalog').then(setServices).catch(() => {});
   useEffect(() => { load(); }, []);
+
+  const resetForm = () => {
+    setForm({ code: '', name: '', defaultBillingAmount: '', recurrenceDefault: 'none' });
+    setShowForm(false);
+    setEditingService(null);
+    setError('');
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     try {
       await api('/services-catalog', { method: 'POST', body: JSON.stringify(form) });
-      setShowForm(false);
-      setForm({ code: '', name: '', defaultBillingAmount: '', recurrenceDefault: 'none' });
+      resetForm();
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const handleEdit = (s: Service) => {
+    setEditingService(s);
+    setForm({
+      code: s.code,
+      name: s.name,
+      defaultBillingAmount: s.defaultBillingAmount || '',
+      recurrenceDefault: s.recurrenceDefault,
+    });
+    setShowForm(false);
+    setError('');
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingService) return;
+    setError('');
+    try {
+      await api(`/services-catalog/${editingService.id}`, { method: 'PATCH', body: JSON.stringify(form) });
+      resetForm();
+      load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api(`/services-catalog/${id}`, { method: 'DELETE' });
+      setDeleteConfirmId(null);
+      load();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+      setDeleteConfirmId(null);
     }
   };
 
@@ -40,14 +87,15 @@ export default function ServicesPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Services Catalog</h2>
         {canCreate && (
-          <button className="primary-button" onClick={() => setShowForm(!showForm)}>
-            {showForm ? 'Cancel' : 'Add Service'}
+          <button className="primary-button" onClick={() => { if (editingService) { resetForm(); } else { setShowForm(!showForm); } }}>
+            {showForm || editingService ? 'Cancel' : 'Add Service'}
           </button>
         )}
       </div>
 
-      {showForm && (
-        <form onSubmit={handleCreate} className="panel space-y-3">
+      {(showForm || editingService) && (
+        <form onSubmit={editingService ? handleUpdate : handleCreate} className="panel space-y-3">
+          <div className="panel-title">{editingService ? 'Edit Service' : 'New Service'}</div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -65,11 +113,11 @@ export default function ServicesPage() {
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Recurrence</label>
               <select className="input-field" value={form.recurrenceDefault} onChange={(e) => setForm({ ...form, recurrenceDefault: e.target.value })}>
-                {['none', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom'].map((v) => <option key={v} value={v}>{v}</option>)}
+                {RECURRENCES.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
           </div>
-          <button type="submit" className="primary-button">Create</button>
+          <button type="submit" className="primary-button">{editingService ? 'Save Changes' : 'Create'}</button>
         </form>
       )}
 
@@ -82,6 +130,7 @@ export default function ServicesPage() {
               <th>Recurrence</th>
               <th>Default Billing</th>
               <th>Strategy</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -92,10 +141,27 @@ export default function ServicesPage() {
                 <td className="text-xs">{s.recurrenceDefault}</td>
                 <td className="text-xs">{s.defaultBillingAmount ? `₹${(Number(s.defaultBillingAmount) / 100).toLocaleString('en-IN')}` : '-'}</td>
                 <td className="text-xs">{s.defaultAssigneeStrategy?.replace(/_/g, ' ') || '-'}</td>
+                <td>
+                  <div className="flex items-center gap-2">
+                    <button className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" title="Edit" onClick={() => handleEdit(s)}>
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    {deleteConfirmId === s.id ? (
+                      <div className="flex items-center gap-1">
+                        <button className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700" onClick={() => handleDelete(s.id)}>Yes</button>
+                        <button className="rounded border border-border px-2 py-1 text-xs hover:bg-accent" onClick={() => setDeleteConfirmId(null)}>No</button>
+                      </div>
+                    ) : (
+                      <button className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" title="Delete" onClick={() => setDeleteConfirmId(s.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
             {services.length === 0 && (
-              <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">No services found</td></tr>
+              <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No services found</td></tr>
             )}
           </tbody>
         </table>

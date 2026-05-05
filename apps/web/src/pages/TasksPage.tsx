@@ -13,6 +13,9 @@ interface Task {
   assignedToUserId?: string;
   assignedTeamId?: string;
   dueDate?: string;
+  staffDueDate?: string;
+  reviewDate?: string;
+  clientDueDate?: string;
   generatedBy: string;
   resolution?: string;
   createdAt?: string;
@@ -64,9 +67,12 @@ export default function TasksPage() {
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [filterCustomer, setFilterCustomer] = useState('');
+  const [filterUser, setFilterUser] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', resolution: '' });
+  const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -92,7 +98,7 @@ export default function TasksPage() {
     api<{ id: string; name: string }[]>('/teams').then(setTeams).catch(() => setTeams([]));
   }, [load]);
 
-  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', resolution: '' }); setShowForm(false); setError(''); };
+  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '' }); setShowForm(false); setError(''); };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
@@ -103,6 +109,9 @@ export default function TasksPage() {
       if (form.assignedToUserId) body.assignedToUserId = form.assignedToUserId;
       if (form.assignedTeamId) body.assignedTeamId = form.assignedTeamId;
       if (form.dueDate) body.dueDate = new Date(form.dueDate).toISOString();
+      if (form.staffDueDate) body.staffDueDate = new Date(form.staffDueDate).toISOString();
+      if (form.reviewDate) body.reviewDate = new Date(form.reviewDate).toISOString();
+      if (form.clientDueDate) body.clientDueDate = new Date(form.clientDueDate).toISOString();
       if (form.resolution) body.resolution = form.resolution;
       await api('/tasks', { method: 'POST', body: JSON.stringify(body) });
       resetForm(); load();
@@ -119,9 +128,21 @@ export default function TasksPage() {
     catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
   };
 
+  const deleteTask = async (taskId: string) => {
+    if (!confirm('Delete this task?')) return;
+    try { await api(`/tasks/${taskId}`, { method: 'DELETE' }); load(); setSelectedTask(null); }
+    catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
+  };
+
   const customerMap = Object.fromEntries(customers.map((c) => [c.id, c.name]));
   const userMap = Object.fromEntries(users.map((u) => [u.id, u.name]));
-  const filtered = filter === 'all' ? tasks : tasks.filter((t) => t.status === filter);
+  const filtered = tasks.filter((t) => {
+    if (filter !== 'all' && t.status !== filter) return false;
+    if (filterCustomer && t.customerId !== filterCustomer) return false;
+    if (filterUser && t.assignedToUserId !== filterUser) return false;
+    if (filterPriority && t.priority !== filterPriority) return false;
+    return true;
+  });
 
   return (
     <section className="space-y-4 p-4 lg:p-6">
@@ -136,12 +157,22 @@ export default function TasksPage() {
             <button className={`px-3 py-1.5 text-xs ${viewMode === 'kanban' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-l-md`} onClick={() => setViewMode('kanban')}>Board</button>
             <button className={`px-3 py-1.5 text-xs ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-r-md`} onClick={() => setViewMode('list')}>List</button>
           </div>
-          {viewMode === 'list' && (
-            <select className="input-field text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
-              <option value="all">All ({tasks.length})</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')} ({tasks.filter((t) => t.status === s).length})</option>)}
-            </select>
-          )}
+          <select className="input-field text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="all">All Status ({tasks.length})</option>
+            {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')} ({tasks.filter((t) => t.status === s).length})</option>)}
+          </select>
+          <select className="input-field text-xs" value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}>
+            <option value="">All Clients</option>
+            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <select className="input-field text-xs" value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
+            <option value="">All Staff</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <select className="input-field text-xs" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+            <option value="">All Priority</option>
+            {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+          </select>
           {canCreate && <button className="primary-button" onClick={() => showForm ? resetForm() : setShowForm(true)}>{showForm ? 'Cancel' : '+ New Task'}</button>}
         </div>
       </div>
@@ -159,6 +190,9 @@ export default function TasksPage() {
             <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to User</label><select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
             <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to Team</label><select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}><option value="">None</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
             <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</label><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Staff Due Date</label><input type="date" className="input-field" value={form.staffDueDate} onChange={(e) => setForm({ ...form, staffDueDate: e.target.value })} /></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Review Date</label><input type="date" className="input-field" value={form.reviewDate} onChange={(e) => setForm({ ...form, reviewDate: e.target.value })} /></div>
+            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Client Due Date</label><input type="date" className="input-field" value={form.clientDueDate} onChange={(e) => setForm({ ...form, clientDueDate: e.target.value })} /></div>
           </div>
           <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>
@@ -246,6 +280,12 @@ export default function TasksPage() {
             await api(`/tasks/${selectedTask.id}`, { method: 'PATCH', body: JSON.stringify(fields) });
             load();
           }}
+          onDelete={async () => {
+            if (!confirm('Are you sure you want to delete this task?')) return;
+            await api(`/tasks/${selectedTask.id}`, { method: 'DELETE' });
+            setSelectedTask(null);
+            load();
+          }}
           onClose={() => { setSelectedTask(null); load(); }}
         />
       )}
@@ -256,13 +296,13 @@ export default function TasksPage() {
 /* ── Task Detail Panel (modal) ── */
 function TaskDetailPanel({
   task, customerMap, userMap, users, canEdit, canComment, canAttach, canLogTime, currentUserId,
-  onStatusChange, onResolutionChange, onUpdate, onClose,
+  onStatusChange, onResolutionChange, onUpdate, onDelete, onClose,
 }: {
   task: Task; customerMap: Record<string, string>; userMap: Record<string, string>;
   users: { id: string; name: string }[];
   canEdit: boolean; canComment: boolean; canAttach: boolean; canLogTime: boolean; currentUserId: string;
   onStatusChange: (s: string) => void; onResolutionChange: (r: string) => void;
-  onUpdate: (fields: Record<string, unknown>) => Promise<void>; onClose: () => void;
+  onUpdate: (fields: Record<string, unknown>) => Promise<void>; onDelete: () => Promise<void>; onClose: () => void;
 }) {
   const [tab, setTab] = useState<DetailTab>('details');
   const [comments, setComments] = useState<Comment[]>([]);
@@ -278,6 +318,9 @@ function TaskDetailPanel({
     priority: task.priority,
     assignedToUserId: task.assignedToUserId || '',
     dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
+    staffDueDate: task.staffDueDate ? task.staffDueDate.slice(0, 10) : '',
+    reviewDate: task.reviewDate ? task.reviewDate.slice(0, 10) : '',
+    clientDueDate: task.clientDueDate ? task.clientDueDate.slice(0, 10) : '',
   });
 
   // Attachment form
@@ -404,9 +447,16 @@ function TaskDetailPanel({
               {task.createdAt && <span>Created: {new Date(task.createdAt).toLocaleDateString('en-IN')}</span>}
             </div>
           </div>
-          <button onClick={onClose} className="ml-2 rounded p-1 text-muted-foreground hover:bg-accent">
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-          </button>
+          <div className="ml-2 flex items-center gap-1">
+            {canEdit && (
+              <button onClick={onDelete} className="rounded p-1 text-red-500 hover:bg-red-50" title="Delete Task">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14" /></svg>
+              </button>
+            )}
+            <button onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-accent">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -469,6 +519,18 @@ function TaskDetailPanel({
                       <label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</label>
                       <input type="date" className="input-field" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} />
                     </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Staff Due Date</label>
+                      <input type="date" className="input-field" value={editForm.staffDueDate} onChange={(e) => setEditForm({ ...editForm, staffDueDate: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Review Date</label>
+                      <input type="date" className="input-field" value={editForm.reviewDate} onChange={(e) => setEditForm({ ...editForm, reviewDate: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Client Due Date</label>
+                      <input type="date" className="input-field" value={editForm.clientDueDate} onChange={(e) => setEditForm({ ...editForm, clientDueDate: e.target.value })} />
+                    </div>
                   </div>
                   <div className="flex gap-2 pt-1">
                     <button className="primary-button text-xs" onClick={async () => {
@@ -477,6 +539,9 @@ function TaskDetailPanel({
                         if (editForm.description) body.description = editForm.description;
                         if (editForm.assignedToUserId) body.assignedToUserId = editForm.assignedToUserId;
                         if (editForm.dueDate) body.dueDate = new Date(editForm.dueDate).toISOString();
+                        if (editForm.staffDueDate) body.staffDueDate = new Date(editForm.staffDueDate).toISOString();
+                        if (editForm.reviewDate) body.reviewDate = new Date(editForm.reviewDate).toISOString();
+                        if (editForm.clientDueDate) body.clientDueDate = new Date(editForm.clientDueDate).toISOString();
                         await onUpdate(body);
                         setEditingDetails(false);
                       } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Save failed'); }
@@ -528,6 +593,30 @@ function TaskDetailPanel({
                         <span className="text-xs font-medium text-muted-foreground">Due Date</span>
                         <p className={`mt-0.5 font-medium ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600' : ''}`}>
                           {new Date(task.dueDate).toLocaleDateString('en-IN')}
+                        </p>
+                      </div>
+                    )}
+                    {task.staffDueDate && (
+                      <div className="rounded-md border border-border p-2.5">
+                        <span className="text-xs font-medium text-muted-foreground">Staff Due Date</span>
+                        <p className={`mt-0.5 font-medium ${new Date(task.staffDueDate) < new Date() && task.status !== 'completed' ? 'text-orange-600' : ''}`}>
+                          {new Date(task.staffDueDate).toLocaleDateString('en-IN')}
+                        </p>
+                      </div>
+                    )}
+                    {task.reviewDate && (
+                      <div className="rounded-md border border-border p-2.5">
+                        <span className="text-xs font-medium text-muted-foreground">Review Date</span>
+                        <p className={`mt-0.5 font-medium ${new Date(task.reviewDate) < new Date() && task.status !== 'completed' ? 'text-purple-600' : ''}`}>
+                          {new Date(task.reviewDate).toLocaleDateString('en-IN')}
+                        </p>
+                      </div>
+                    )}
+                    {task.clientDueDate && (
+                      <div className="rounded-md border border-border p-2.5">
+                        <span className="text-xs font-medium text-muted-foreground">Client Due Date</span>
+                        <p className={`mt-0.5 font-medium ${new Date(task.clientDueDate) < new Date() && task.status !== 'completed' ? 'text-red-600' : ''}`}>
+                          {new Date(task.clientDueDate).toLocaleDateString('en-IN')}
                         </p>
                       </div>
                     )}

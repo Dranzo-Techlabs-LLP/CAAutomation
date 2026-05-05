@@ -32,4 +32,16 @@ export class EnquiryResponseDto {
 
   @ApiPropertyOptional()
   convertedAt?: Date | null;
+
+  @ApiPropertyOptional()
+  serviceId?: string | null;
+
+  @ApiPropertyOptional()
+  referralName?: string | null;
+
+  @ApiPropertyOptional()
+  referralContact?: string | null;
+
+  @ApiPropertyOptional()
+  referralDetails?: string | null;
 }

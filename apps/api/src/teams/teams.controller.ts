@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -26,5 +26,18 @@ export class TeamsController {
   @Permissions('team.create')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateTeamDto): Promise<TeamResponseDto> {
     return this.teamsService.create(user.firmId, dto, user.id);
+  }
+
+  @Patch(':id')
+  @Permissions('team.create')
+  async update(@CurrentUser() user: RequestUser, @Param('id') id: string, @Body() dto: Partial<CreateTeamDto>): Promise<TeamResponseDto> {
+    return this.teamsService.update(user.firmId, id, dto, user.id);
+  }
+
+  @Delete(':id')
+  @Permissions('team.create')
+  async delete(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ deleted: boolean }> {
+    await this.teamsService.delete(user.firmId, id);
+    return { deleted: true };
   }
 }

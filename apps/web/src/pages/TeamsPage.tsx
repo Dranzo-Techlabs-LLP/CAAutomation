@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -16,8 +17,10 @@ export default function TeamsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [form, setForm] = useState({ name: '', description: '', leadUserId: '' });
   const [error, setError] = useState('');
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const load = () => api<Team[]>('/teams').then(setTeams).catch(() => {});
 
@@ -25,6 +28,13 @@ export default function TeamsPage() {
     load();
     api<{ id: string; name: string }[]>('/users').then(setUsers).catch(() => setUsers([]));
   }, []);
+
+  const resetForm = () => {
+    setForm({ name: '', description: '', leadUserId: '' });
+    setShowForm(false);
+    setEditingTeam(null);
+    setError('');
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,11 +44,44 @@ export default function TeamsPage() {
       if (form.description) body.description = form.description;
       if (form.leadUserId) body.leadUserId = form.leadUserId;
       await api('/teams', { method: 'POST', body: JSON.stringify(body) });
-      setShowForm(false);
-      setForm({ name: '', description: '', leadUserId: '' });
+      resetForm();
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const handleEdit = (team: Team) => {
+    setEditingTeam(team);
+    setForm({ name: team.name, description: team.description || '', leadUserId: team.leadUserId || '' });
+    setShowForm(false);
+    setError('');
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTeam) return;
+    setError('');
+    try {
+      const body: Record<string, unknown> = { name: form.name };
+      if (form.description) body.description = form.description;
+      if (form.leadUserId) body.leadUserId = form.leadUserId;
+      await api(`/teams/${editingTeam.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      resetForm();
+      load();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api(`/teams/${id}`, { method: 'DELETE' });
+      setDeleteConfirmId(null);
+      load();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+      setDeleteConfirmId(null);
     }
   };
 
@@ -49,14 +92,15 @@ export default function TeamsPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Teams</h2>
         {canCreate && (
-          <button className="primary-button" onClick={() => setShowForm(!showForm)}>
-            {showForm ? 'Cancel' : 'Create Team'}
+          <button className="primary-button" onClick={() => { if (editingTeam) { resetForm(); } else { setShowForm(!showForm); } }}>
+            {showForm || editingTeam ? 'Cancel' : 'Create Team'}
           </button>
         )}
       </div>
 
-      {showForm && (
-        <form onSubmit={handleCreate} className="panel space-y-3">
+      {(showForm || editingTeam) && (
+        <form onSubmit={editingTeam ? handleUpdate : handleCreate} className="panel space-y-3">
+          <div className="panel-title">{editingTeam ? 'Edit Team' : 'New Team'}</div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
@@ -75,14 +119,31 @@ export default function TeamsPage() {
               </select>
             </div>
           </div>
-          <button type="submit" className="primary-button">Create</button>
+          <button type="submit" className="primary-button">{editingTeam ? 'Save Changes' : 'Create'}</button>
         </form>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {teams.map((team) => (
           <div key={team.id} className="panel">
-            <h3 className="font-medium">{team.name}</h3>
+            <div className="flex items-start justify-between">
+              <h3 className="font-medium">{team.name}</h3>
+              <div className="flex items-center gap-1">
+                <button className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" title="Edit" onClick={() => handleEdit(team)}>
+                  <Pencil className="h-4 w-4" />
+                </button>
+                {deleteConfirmId === team.id ? (
+                  <div className="flex items-center gap-1">
+                    <button className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-700" onClick={() => handleDelete(team.id)}>Yes</button>
+                    <button className="rounded border border-border px-2 py-1 text-xs hover:bg-accent" onClick={() => setDeleteConfirmId(null)}>No</button>
+                  </div>
+                ) : (
+                  <button className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" title="Delete" onClick={() => setDeleteConfirmId(team.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </div>
             {team.description && <p className="mt-1 text-xs text-muted-foreground">{team.description}</p>}
             {team.leadUserId && (
               <p className="mt-2 text-xs">Lead: <span className="font-medium">{userMap[team.leadUserId] || 'Unknown'}</span></p>

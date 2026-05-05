@@ -41,6 +41,18 @@ export class Enquiry extends TenantAuditColumns {
   @Column({ name: 'converted_at', type: 'datetime', precision: 6, nullable: true })
   convertedAt?: Date | null;
 
+  @Column({ name: 'service_id', type: 'varchar', length: 36, nullable: true })
+  serviceId?: string | null;
+
+  @Column({ name: 'referral_name', type: 'varchar', length: 255, nullable: true })
+  referralName?: string | null;
+
+  @Column({ name: 'referral_contact', type: 'varchar', length: 50, nullable: true })
+  referralContact?: string | null;
+
+  @Column({ name: 'referral_details', type: 'text', nullable: true })
+  referralDetails?: string | null;
+
   @ManyToOne(() => Customer, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'customer_id' })
   customer!: Customer;

@@ -72,6 +72,15 @@ export class Task extends TenantAuditColumns {
   @Column({ name: 'due_date', type: 'datetime', precision: 6, nullable: true })
   dueDate?: Date | null;
 
+  @Column({ name: 'staff_due_date', type: 'datetime', precision: 6, nullable: true })
+  staffDueDate?: Date | null;
+
+  @Column({ name: 'review_date', type: 'datetime', precision: 6, nullable: true })
+  reviewDate?: Date | null;
+
+  @Column({ name: 'client_due_date', type: 'datetime', precision: 6, nullable: true })
+  clientDueDate?: Date | null;
+
   @Column({ name: 'started_at', type: 'datetime', precision: 6, nullable: true })
   startedAt?: Date | null;
 
