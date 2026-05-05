@@ -152,29 +152,33 @@ export default function TasksPage() {
           <h2 className="text-lg font-semibold">Tasks</h2>
           <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-muted-foreground">{tasks.length}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-md border border-border">
-            <button className={`px-3 py-1.5 text-xs ${viewMode === 'kanban' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-l-md`} onClick={() => setViewMode('kanban')}>Board</button>
-            <button className={`px-3 py-1.5 text-xs ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'} rounded-r-md`} onClick={() => setViewMode('list')}>List</button>
+            <button className={`px-3 py-1.5 text-xs ${viewMode === 'kanban' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-accent'} rounded-l-md`} onClick={() => setViewMode('kanban')}>Board</button>
+            <button className={`px-3 py-1.5 text-xs ${viewMode === 'list' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-accent'} rounded-r-md`} onClick={() => setViewMode('list')}>List</button>
           </div>
-          <select className="input-field text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="all">All Status ({tasks.length})</option>
-            {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')} ({tasks.filter((t) => t.status === s).length})</option>)}
-          </select>
-          <select className="input-field text-xs" value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}>
-            <option value="">All Clients</option>
-            {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select className="input-field text-xs" value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
-            <option value="">All Staff</option>
-            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-          <select className="input-field text-xs" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-            <option value="">All Priority</option>
-            {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-          </select>
-          {canCreate && <button className="primary-button" onClick={() => showForm ? resetForm() : setShowForm(true)}>{showForm ? 'Cancel' : '+ New Task'}</button>}
+          {canCreate && <button className="primary-button text-sm" onClick={() => showForm ? resetForm() : setShowForm(true)}>{showForm ? 'Cancel' : '+ New Task'}</button>}
         </div>
+      </div>
+
+      {/* Filters */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <select className="input-field text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="all">All Status ({tasks.length})</option>
+          {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')} ({tasks.filter((t) => t.status === s).length})</option>)}
+        </select>
+        <select className="input-field text-xs" value={filterCustomer} onChange={(e) => setFilterCustomer(e.target.value)}>
+          <option value="">All Clients</option>
+          {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select className="input-field text-xs" value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
+          <option value="">All Staff</option>
+          {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <select className="input-field text-xs" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+          <option value="">All Priority</option>
+          {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+        </select>
       </div>
 
       {/* Create Form */}

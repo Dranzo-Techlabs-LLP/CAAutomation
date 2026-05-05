@@ -100,9 +100,9 @@ export default function CustomersPage() {
 
   return (
     <section className="space-y-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Customers</h2>
-        <button className="primary-button" onClick={() => { if (editingCustomer) { resetForm(); } else { setShowForm(!showForm); setEditingCustomer(null); } }}>
+        <button className="primary-button text-sm" onClick={() => { if (editingCustomer) { resetForm(); } else { setShowForm(!showForm); setEditingCustomer(null); } }}>
           {showForm || editingCustomer ? 'Cancel' : 'Add Customer'}
         </button>
       </div>

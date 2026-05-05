@@ -84,10 +84,10 @@ export default function ServicesPage() {
 
   return (
     <section className="space-y-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Services Catalog</h2>
         {canCreate && (
-          <button className="primary-button" onClick={() => { if (editingService) { resetForm(); } else { setShowForm(!showForm); } }}>
+          <button className="primary-button text-sm" onClick={() => { if (editingService) { resetForm(); } else { setShowForm(!showForm); } }}>
             {showForm || editingService ? 'Cancel' : 'Add Service'}
           </button>
         )}

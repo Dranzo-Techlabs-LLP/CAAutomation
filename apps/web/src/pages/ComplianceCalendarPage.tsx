@@ -134,10 +134,10 @@ export default function ComplianceCalendarPage() {
 
   return (
     <section className="space-y-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Compliance Calendar</h2>
-        <div className="flex items-center gap-2">
-          <button className="icon-button flex items-center gap-1 text-xs" onClick={() => setShowFilters(!showFilters)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="primary-button text-xs" style={{ background: showFilters ? 'hsl(var(--accent))' : undefined, color: showFilters ? 'hsl(var(--foreground))' : undefined }} onClick={() => setShowFilters(!showFilters)}>
             <Filter className="h-4 w-4" /> Filters
           </button>
           <button className="icon-button" onClick={prevMonth}>&lt;</button>

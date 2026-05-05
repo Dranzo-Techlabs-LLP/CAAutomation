@@ -167,9 +167,9 @@ export default function EnquiriesPage() {
 
   return (
     <section className="space-y-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Enquiries</h2>
-        <button className="primary-button" onClick={() => { if (editingEnquiry) { resetForm(); } else { setShowForm(!showForm); } }}>
+        <button className="primary-button text-sm" onClick={() => { if (editingEnquiry) { resetForm(); } else { setShowForm(!showForm); } }}>
           {showForm || editingEnquiry ? 'Cancel' : 'New Enquiry'}
         </button>
       </div>
