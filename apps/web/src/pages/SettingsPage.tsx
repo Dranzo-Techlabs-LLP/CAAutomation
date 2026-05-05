@@ -115,7 +115,7 @@ export default function SettingsPage() {
           </div>
           {/* Or use URL */}
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Or paste logo URL</label>
+            <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Or paste logo URL</label>
             <input
               className="input-field"
               placeholder="https://example.com/logo.png"
@@ -133,19 +133,19 @@ export default function SettingsPage() {
           <div className="panel-title">Business Details</div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Business Name *</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Business Name *</label>
               <input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">GSTIN</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">GSTIN</label>
               <input className="input-field" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} maxLength={15} placeholder="22AAAAA0000A1Z5" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">PAN</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">PAN</label>
               <input className="input-field" value={form.pan} onChange={(e) => setForm({ ...form, pan: e.target.value.toUpperCase() })} maxLength={10} placeholder="AAAAA0000A" />
             </div>
             <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Address</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Address</label>
               <textarea className="input-field" rows={3} value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full business address for invoices" />
             </div>
           </div>

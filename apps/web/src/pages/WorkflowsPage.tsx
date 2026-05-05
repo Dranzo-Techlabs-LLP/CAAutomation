@@ -237,15 +237,15 @@ function WorkflowForm({ workflow, onSaved }: { workflow?: Workflow; onSaved: () 
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+          <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Name</label>
           <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label>
+          <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label>
           <input className="input-field" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">Applies To (service code)</label>
+          <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Applies To (service code)</label>
           <input className="input-field" value={appliesTo} onChange={(e) => setAppliesTo(e.target.value)} />
         </div>
       </div>
@@ -254,7 +254,7 @@ function WorkflowForm({ workflow, onSaved }: { workflow?: Workflow; onSaved: () 
       {steps.map((step, idx) => (
         <div key={idx} className="rounded border border-border p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Step {step.sequenceNo}</span>
+            <span className="text-[13px] font-medium text-muted-foreground">Step {step.sequenceNo}</span>
             {steps.length > 1 && (
               <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => removeStep(idx)}>Remove</button>
             )}
@@ -487,11 +487,11 @@ function AutomationRuleForm({ rule, onSaved }: { rule?: AutomationRule; onSaved:
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">Rule Name</label>
+          <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Rule Name</label>
           <input className="input-field" value={name} onChange={(e) => setName(e.target.value)} required />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label>
+          <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label>
           <input className="input-field" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
       </div>

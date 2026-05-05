@@ -182,7 +182,7 @@ export default function CustomersPage() {
 function Field({ label, value, onChange, type = 'text', required = false }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-muted-foreground">{label}</label>
+      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="input-field" required={required} />
     </div>
   );
@@ -191,7 +191,7 @@ function Field({ label, value, onChange, type = 'text', required = false }: { la
 function SelectField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-muted-foreground">{label}</label>
+      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)} className="input-field">
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>

@@ -104,15 +104,15 @@ export default function TeamsPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Name</label>
               <input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label>
               <input className="input-field" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Lead</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Lead</label>
               <select className="input-field" value={form.leadUserId} onChange={(e) => setForm({ ...form, leadUserId: e.target.value })}>
                 <option value="">Select...</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}

@@ -181,7 +181,7 @@ export default function EnquiriesPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {/* Customer selection */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Customer</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Customer</label>
               {!creatingCustomer ? (
                 <div className="flex gap-1">
                   <select className="input-field flex-1" value={form.customerId} onChange={(e) => {
@@ -217,7 +217,7 @@ export default function EnquiriesPage() {
 
             {/* Source */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Source</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Source</label>
               <select className="input-field" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}>
                 {SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -225,7 +225,7 @@ export default function EnquiriesPage() {
 
             {/* Service type */}
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Service Type</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Service Type</label>
               <select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}>
                 <option value="">None</option>
                 {servicesList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -234,7 +234,7 @@ export default function EnquiriesPage() {
 
             {/* Brief */}
             <div className="sm:col-span-2 lg:col-span-3">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Brief</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Brief</label>
               <input className="input-field" value={form.brief} onChange={(e) => setForm({ ...form, brief: e.target.value })} />
             </div>
           </div>
@@ -245,15 +245,15 @@ export default function EnquiriesPage() {
               <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-300">Referral Details</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Referral Name</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Referral Name</label>
                   <input className="input-field" value={form.referralName} onChange={(e) => setForm({ ...form, referralName: e.target.value })} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Referral Contact</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Referral Contact</label>
                   <input className="input-field" value={form.referralContact} onChange={(e) => setForm({ ...form, referralContact: e.target.value })} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Referral Details</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Referral Details</label>
                   <input className="input-field" value={form.referralDetails} onChange={(e) => setForm({ ...form, referralDetails: e.target.value })} />
                 </div>
               </div>

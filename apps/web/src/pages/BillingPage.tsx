@@ -382,18 +382,18 @@ export default function BillingPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Customer *</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Customer *</label>
               <select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required>
                 <option value="">Select...</option>
                 {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Issue Date *</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Issue Date *</label>
               <input type="date" className="input-field" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date *</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Due Date *</label>
               <input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} required />
             </div>
           </div>
@@ -440,11 +440,11 @@ export default function BillingPage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Notes</label>
               <textarea className="input-field" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional notes" />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Terms & Conditions</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Terms & Conditions</label>
               <textarea className="input-field" rows={2} value={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.value })} placeholder="Payment terms" />
             </div>
           </div>
@@ -517,18 +517,18 @@ export default function BillingPage() {
             <div className="panel-title">Record Payment</div>
             <div className="space-y-3">
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Amount (paise)</label>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Amount (paise)</label>
                 <input className="input-field" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} />
                 <p className="mt-0.5 text-xs text-muted-foreground">{payForm.amount ? formatPaise(payForm.amount) : ''}</p>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Mode</label>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Mode</label>
                 <select className="input-field" value={payForm.mode} onChange={(e) => setPayForm({ ...payForm, mode: e.target.value })}>
                   {['cash', 'upi', 'neft', 'cheque', 'other'].map((m) => <option key={m} value={m}>{m.toUpperCase()}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Reference No</label>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Reference No</label>
                 <input className="input-field" value={payForm.referenceNo} onChange={(e) => setPayForm({ ...payForm, referenceNo: e.target.value })} placeholder="Transaction ID" />
               </div>
             </div>
@@ -568,15 +568,15 @@ export default function BillingPage() {
 
             <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-xs font-medium text-muted-foreground">Customer</span>
+                <span className="text-[13px] font-medium text-muted-foreground">Customer</span>
                 <p>{customerMap[viewingInvoice.customerId] || '-'}</p>
               </div>
               <div>
-                <span className="text-xs font-medium text-muted-foreground">Issue Date</span>
+                <span className="text-[13px] font-medium text-muted-foreground">Issue Date</span>
                 <p>{new Date(viewingInvoice.issueDate).toLocaleDateString('en-IN')}</p>
               </div>
               <div>
-                <span className="text-xs font-medium text-muted-foreground">Due Date</span>
+                <span className="text-[13px] font-medium text-muted-foreground">Due Date</span>
                 <p>{new Date(viewingInvoice.dueDate).toLocaleDateString('en-IN')}</p>
               </div>
             </div>
@@ -616,13 +616,13 @@ export default function BillingPage() {
 
             {viewingInvoice.notes && (
               <div className="mt-4 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Notes</span>
+                <span className="text-[13px] font-medium text-muted-foreground">Notes</span>
                 <p className="mt-0.5 text-muted-foreground">{viewingInvoice.notes}</p>
               </div>
             )}
             {viewingInvoice.terms && (
               <div className="mt-2 text-sm">
-                <span className="text-xs font-medium text-muted-foreground">Terms</span>
+                <span className="text-[13px] font-medium text-muted-foreground">Terms</span>
                 <p className="mt-0.5 text-muted-foreground">{viewingInvoice.terms}</p>
               </div>
             )}

@@ -99,19 +99,19 @@ export default function ServicesPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Code</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Code</label>
               <input className="input-field" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Name</label>
               <input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Default Billing (paise)</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Default Billing (paise)</label>
               <input className="input-field" value={form.defaultBillingAmount} onChange={(e) => setForm({ ...form, defaultBillingAmount: e.target.value })} />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Recurrence</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Recurrence</label>
               <select className="input-field" value={form.recurrenceDefault} onChange={(e) => setForm({ ...form, recurrenceDefault: e.target.value })}>
                 {RECURRENCES.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>

@@ -159,21 +159,21 @@ export default function ComplianceCalendarPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Client</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client</label>
               <select className="input-field" value={filterCustomerId} onChange={(e) => setFilterCustomerId(e.target.value)}>
                 <option value="">All Clients</option>
                 {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Staff</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff</label>
               <select className="input-field" value={filterUserId} onChange={(e) => setFilterUserId(e.target.value)}>
                 <option value="">All Staff</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Status</label>
               <div className="flex flex-wrap gap-1">
                 {TASK_STATUSES.map((s) => (
                   <button key={s} type="button"
@@ -183,7 +183,7 @@ export default function ComplianceCalendarPage() {
               </div>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Date Types</label>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Date Types</label>
               <div className="flex flex-wrap gap-1">
                 {(Object.keys(DATE_TYPE_LABELS) as DateType[]).map((dt) => (
                   <button key={dt} type="button"
@@ -210,7 +210,7 @@ export default function ComplianceCalendarPage() {
             const dayEntries = entriesByDay[day] || [];
             return (
               <div key={day} className="bg-panel p-2 min-h-[80px]">
-                <div className="text-xs font-medium text-muted-foreground mb-1">{day}</div>
+                <div className="text-[13px] font-medium text-muted-foreground mb-1">{day}</div>
                 {dayEntries.map((entry, ei) => {
                   const overdue = isOverdue(entry);
                   return (

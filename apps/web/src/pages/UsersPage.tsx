@@ -117,26 +117,26 @@ export default function UsersPage() {
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Name</label>
                   <input className="input-field" value={userForm.name} onChange={(e) => setUserForm({ ...userForm, name: e.target.value })} required />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Email</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Email</label>
                   <input type="email" className="input-field" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} required />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Password (min 12 chars)</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Password (min 12 chars)</label>
                   <input type="password" className="input-field" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} required minLength={12} />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Role</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Role</label>
                   <select className="input-field" value={userForm.roleId} onChange={(e) => setUserForm({ ...userForm, roleId: e.target.value })} required>
                     <option value="">Select...</option>
                     {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-muted-foreground">Phone</label>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Phone</label>
                   <input className="input-field" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
                 </div>
               </div>

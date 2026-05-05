@@ -187,19 +187,19 @@ export default function TasksPage() {
           <div className="panel-title">Create New Task</div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Title *</label><input className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Customer *</label><select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required><option value="">Select...</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Service</label><select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}><option value="">None</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Priority</label><select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}</select></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to User</label><select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Assign to Team</label><select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}><option value="">None</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</label><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Staff Due Date</label><input type="date" className="input-field" value={form.staffDueDate} onChange={(e) => setForm({ ...form, staffDueDate: e.target.value })} /></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Review Date</label><input type="date" className="input-field" value={form.reviewDate} onChange={(e) => setForm({ ...form, reviewDate: e.target.value })} /></div>
-            <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Client Due Date</label><input type="date" className="input-field" value={form.clientDueDate} onChange={(e) => setForm({ ...form, clientDueDate: e.target.value })} /></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Title *</label><input className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Customer *</label><select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required><option value="">Select...</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Service</label><select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}><option value="">None</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label><select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}</select></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to User</label><select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to Team</label><select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}><option value="">None</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Due Date</label><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label><input type="date" className="input-field" value={form.staffDueDate} onChange={(e) => setForm({ ...form, staffDueDate: e.target.value })} /></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Date</label><input type="date" className="input-field" value={form.reviewDate} onChange={(e) => setForm({ ...form, reviewDate: e.target.value })} /></div>
+            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client Due Date</label><input type="date" className="input-field" value={form.clientDueDate} onChange={(e) => setForm({ ...form, clientDueDate: e.target.value })} /></div>
           </div>
-          <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>
+          <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+          <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>
           <button type="submit" className="primary-button">Create Task</button>
         </form>
       )}
@@ -215,7 +215,7 @@ export default function TasksPage() {
               <div key={status} className="flex w-72 min-w-[18rem] flex-shrink-0 flex-col rounded-lg bg-accent/30 dark:bg-accent/10">
                 <div className={`flex items-center justify-between border-b-2 ${STATUS_HEADER_COLORS[status] || ''} px-3 py-2.5`}>
                   <span className="text-xs font-semibold uppercase tracking-wide">{status.replace(/_/g, ' ')}</span>
-                  <span className="rounded-full bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">{col.length}</span>
+                  <span className="rounded-full bg-background px-2 py-0.5 text-[13px] font-medium text-muted-foreground">{col.length}</span>
                 </div>
                 <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ maxHeight: 'calc(60vh - 48px)' }}>
                   {col.map((task) => (
@@ -492,47 +492,47 @@ function TaskDetailPanel({
                 /* ── Edit Mode ── */
                 <div className="space-y-3 rounded-md border border-primary/30 bg-primary/5 p-4">
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Title</label>
+                    <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Title</label>
                     <input className="input-field" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Description</label>
+                    <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label>
                     <textarea className="input-field" rows={3} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Priority</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label>
                       <select className="input-field" value={editForm.priority} onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}>
                         {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Status</label>
                       <select className="input-field" value={task.status} onChange={(e) => onStatusChange(e.target.value)}>
                         {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Assign To</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign To</label>
                       <select className="input-field" value={editForm.assignedToUserId} onChange={(e) => setEditForm({ ...editForm, assignedToUserId: e.target.value })}>
                         <option value="">Unassigned</option>
                         {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Due Date</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Due Date</label>
                       <input type="date" className="input-field" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Staff Due Date</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label>
                       <input type="date" className="input-field" value={editForm.staffDueDate} onChange={(e) => setEditForm({ ...editForm, staffDueDate: e.target.value })} />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Review Date</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Date</label>
                       <input type="date" className="input-field" value={editForm.reviewDate} onChange={(e) => setEditForm({ ...editForm, reviewDate: e.target.value })} />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Client Due Date</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client Due Date</label>
                       <input type="date" className="input-field" value={editForm.clientDueDate} onChange={(e) => setEditForm({ ...editForm, clientDueDate: e.target.value })} />
                     </div>
                   </div>
@@ -557,13 +557,13 @@ function TaskDetailPanel({
                 /* ── View Mode ── */
                 <>
                   {task.description && (
-                    <div><span className="text-xs font-medium text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap rounded-md bg-accent/20 p-2">{task.description}</p></div>
+                    <div><span className="text-[13px] font-medium text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap rounded-md bg-accent/20 p-2">{task.description}</p></div>
                   )}
 
                   {/* Status (view-only when not editing) */}
                   {canEdit && (
                     <div>
-                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Quick Status Change</label>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Quick Status Change</label>
                       <select className="input-field" value={task.status} onChange={(e) => onStatusChange(e.target.value)}>
                         {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                       </select>
@@ -573,28 +573,28 @@ function TaskDetailPanel({
                   {/* Info Grid */}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-md border border-border p-2.5">
-                      <span className="text-xs font-medium text-muted-foreground">Customer</span>
+                      <span className="text-[13px] font-medium text-muted-foreground">Customer</span>
                       <p className="mt-0.5 font-medium">{customerMap[task.customerId] || '-'}</p>
                     </div>
                     <div className="rounded-md border border-border p-2.5">
-                      <span className="text-xs font-medium text-muted-foreground">Assignee</span>
+                      <span className="text-[13px] font-medium text-muted-foreground">Assignee</span>
                       <p className="mt-0.5 font-medium">{task.assignedToUserId ? (userMap[task.assignedToUserId] || '-') : 'Unassigned'}</p>
                     </div>
                     <div className="rounded-md border border-border p-2.5">
-                      <span className="text-xs font-medium text-muted-foreground">Priority</span>
+                      <span className="text-[13px] font-medium text-muted-foreground">Priority</span>
                       <p className={`mt-0.5 font-medium capitalize ${PRIORITY_COLORS[task.priority] || ''}`}>{task.priority}</p>
                     </div>
                     <div className="rounded-md border border-border p-2.5">
-                      <span className="text-xs font-medium text-muted-foreground">Total Effort</span>
+                      <span className="text-[13px] font-medium text-muted-foreground">Total Effort</span>
                       <p className="mt-0.5 font-medium">{totalHours} hrs ({timeLogs.length} entries)</p>
                     </div>
                     <div className="rounded-md border border-border p-2.5">
-                      <span className="text-xs font-medium text-muted-foreground">Generated By</span>
+                      <span className="text-[13px] font-medium text-muted-foreground">Generated By</span>
                       <p className="mt-0.5 font-medium capitalize">{task.generatedBy}</p>
                     </div>
                     {task.dueDate && (
                       <div className="rounded-md border border-border p-2.5">
-                        <span className="text-xs font-medium text-muted-foreground">Due Date</span>
+                        <span className="text-[13px] font-medium text-muted-foreground">Due Date</span>
                         <p className={`mt-0.5 font-medium ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600' : ''}`}>
                           {new Date(task.dueDate).toLocaleDateString('en-IN')}
                         </p>
@@ -602,7 +602,7 @@ function TaskDetailPanel({
                     )}
                     {task.staffDueDate && (
                       <div className="rounded-md border border-border p-2.5">
-                        <span className="text-xs font-medium text-muted-foreground">Staff Due Date</span>
+                        <span className="text-[13px] font-medium text-muted-foreground">Staff Due Date</span>
                         <p className={`mt-0.5 font-medium ${new Date(task.staffDueDate) < new Date() && task.status !== 'completed' ? 'text-orange-600' : ''}`}>
                           {new Date(task.staffDueDate).toLocaleDateString('en-IN')}
                         </p>
@@ -610,7 +610,7 @@ function TaskDetailPanel({
                     )}
                     {task.reviewDate && (
                       <div className="rounded-md border border-border p-2.5">
-                        <span className="text-xs font-medium text-muted-foreground">Review Date</span>
+                        <span className="text-[13px] font-medium text-muted-foreground">Review Date</span>
                         <p className={`mt-0.5 font-medium ${new Date(task.reviewDate) < new Date() && task.status !== 'completed' ? 'text-purple-600' : ''}`}>
                           {new Date(task.reviewDate).toLocaleDateString('en-IN')}
                         </p>
@@ -618,7 +618,7 @@ function TaskDetailPanel({
                     )}
                     {task.clientDueDate && (
                       <div className="rounded-md border border-border p-2.5">
-                        <span className="text-xs font-medium text-muted-foreground">Client Due Date</span>
+                        <span className="text-[13px] font-medium text-muted-foreground">Client Due Date</span>
                         <p className={`mt-0.5 font-medium ${new Date(task.clientDueDate) < new Date() && task.status !== 'completed' ? 'text-red-600' : ''}`}>
                           {new Date(task.clientDueDate).toLocaleDateString('en-IN')}
                         </p>
@@ -699,7 +699,7 @@ function TaskDetailPanel({
 
                   {/* URL Attachment - proper labeled form */}
                   <form onSubmit={handleAttach} className="rounded-md border border-border p-3 space-y-3">
-                    <div className="text-xs font-medium text-muted-foreground mb-2">Attach Link / URL</div>
+                    <div className="text-[13px] font-medium text-muted-foreground mb-2">Attach Link / URL</div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div>
                         <label className="mb-1 block text-xs text-muted-foreground">File Name *</label>
@@ -726,7 +726,7 @@ function TaskDetailPanel({
 
               {/* Attachments List */}
               <div className="space-y-2">
-                {attachments.length > 0 && <div className="text-xs font-medium text-muted-foreground">{attachments.length} attachment{attachments.length !== 1 ? 's' : ''}</div>}
+                {attachments.length > 0 && <div className="text-[13px] font-medium text-muted-foreground">{attachments.length} attachment{attachments.length !== 1 ? 's' : ''}</div>}
                 {attachments.map((a) => (
                   <div key={a.id} className="flex items-center justify-between rounded-md border border-border p-3">
                     <div className="min-w-0 flex-1">
@@ -812,7 +812,7 @@ function TaskDetailPanel({
 
               {/* Time Logs List */}
               <div className="space-y-2">
-                {timeLogs.length > 0 && <div className="text-xs font-medium text-muted-foreground">Time Entries</div>}
+                {timeLogs.length > 0 && <div className="text-[13px] font-medium text-muted-foreground">Time Entries</div>}
                 {timeLogs.map((tl) => {
                   const dur = tl.durationMinutes ? `${Math.floor(tl.durationMinutes / 60)}h ${tl.durationMinutes % 60}m` : '—';
                   return (
