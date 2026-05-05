@@ -103,14 +103,6 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Demo credentials */}
-        <div className="mt-6 rounded-lg border border-border bg-accent/30 p-3 text-center">
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Demo Credentials</p>
-          <div className="space-y-1 text-xs text-muted-foreground">
-            <p><span className="font-medium text-foreground">Admin:</span> partner@demo.local / DemoPassword123!</p>
-            <p><span className="font-medium text-foreground">Staff:</span> associate@demo.local / DemoPassword123!</p>
-          </div>
-        </div>
       </div>
     </div>
   );
