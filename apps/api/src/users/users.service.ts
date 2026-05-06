@@ -61,6 +61,16 @@ export class UsersService {
     return this.toResponse(saved);
   }
 
+  async resetPassword(userId: string, firmId: string, newPassword: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId, firmId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const rounds = Number(this.config.get<string>('BCRYPT_ROUNDS') ?? 12);
+    const passwordHash = await bcrypt.hash(newPassword, rounds);
+    await this.userRepository.update({ id: userId }, { passwordHash });
+  }
+
   async markLogin(userId: string): Promise<void> {
     await this.userRepository.update({ id: userId }, { lastLoginAt: new Date() });
   }

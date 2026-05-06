@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequestUser } from '../common/types/request-user';
 import { CreateUserDto } from './dto/create-user.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
@@ -40,5 +41,16 @@ export class UsersController {
   @Permissions('user.view')
   async getOne(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<UserResponseDto> {
     return this.usersService.getByIdForFirm(id, user.firmId);
+  }
+
+  @Patch(':id/reset-password')
+  @Permissions('user.create')
+  async resetPassword(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() dto: ResetPasswordDto,
+  ): Promise<{ message: string }> {
+    await this.usersService.resetPassword(id, user.firmId, dto.newPassword);
+    return { message: 'Password reset successfully' };
   }
 }

@@ -40,6 +40,10 @@ export default function UsersPage() {
   const [selectedPermIds, setSelectedPermIds] = useState<string[]>([]);
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', roleId: '', phone: '' });
   const [error, setError] = useState('');
+  const [resetTarget, setResetTarget] = useState<UserItem | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
 
   const loadUsers = () => api<UserItem[]>('/users').then(setUsers).catch(() => {});
   const loadRoles = () => api<RoleItem[]>('/roles').then(setRoles).catch(() => {});
@@ -60,6 +64,24 @@ export default function UsersPage() {
       loadUsers();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    setResetError('');
+    setResetSuccess('');
+    try {
+      await api(`/users/${resetTarget.id}/reset-password`, {
+        method: 'PATCH',
+        body: JSON.stringify({ newPassword }),
+      });
+      setResetSuccess(`Password reset for ${resetTarget.email}`);
+      setNewPassword('');
+      setTimeout(() => { setResetTarget(null); setResetSuccess(''); }, 2000);
+    } catch (err: unknown) {
+      setResetError(err instanceof Error ? err.message : 'Failed to reset password');
     }
   };
 
@@ -153,6 +175,7 @@ export default function UsersPage() {
                   <th>Role</th>
                   <th>Status</th>
                   <th>Last Login</th>
+                  {canCreateUser && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -167,6 +190,16 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td className="text-xs">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN') : 'Never'}</td>
+                    {canCreateUser && (
+                      <td>
+                        <button
+                          className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                          onClick={() => { setResetTarget(u); setNewPassword(''); setResetError(''); setResetSuccess(''); }}
+                        >
+                          Reset Password
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -231,6 +264,44 @@ export default function UsersPage() {
             ))}
           </div>
         </>
+      )}
+      {/* Reset Password Modal */}
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setResetTarget(null)}>
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-1 text-lg font-semibold">Reset Password</h3>
+            <p className="mb-4 text-sm text-muted-foreground">
+              Set new password for <span className="font-medium text-foreground">{resetTarget.email}</span>
+            </p>
+            {resetSuccess && (
+              <div className="mb-3 rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
+                {resetSuccess}
+              </div>
+            )}
+            {resetError && (
+              <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
+                {resetError}
+              </div>
+            )}
+            <form onSubmit={handleResetPassword}>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">New Password</label>
+              <input
+                type="password"
+                className="input-field mb-4"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={8}
+                required
+                placeholder="Min 8 characters"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <button type="button" className="secondary-button" onClick={() => setResetTarget(null)}>Cancel</button>
+                <button type="submit" className="primary-button">Reset Password</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </section>
   );
