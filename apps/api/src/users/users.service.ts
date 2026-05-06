@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -59,6 +59,20 @@ export class UsersService {
 
     const saved = await this.userRepository.save(user);
     return this.toResponse(saved);
+  }
+
+  async changeOwnPassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+    const rounds = Number(this.config.get<string>('BCRYPT_ROUNDS') ?? 12);
+    const passwordHash = await bcrypt.hash(newPassword, rounds);
+    await this.userRepository.update({ id: userId }, { passwordHash });
   }
 
   async resetPassword(userId: string, firmId: string, newPassword: string): Promise<void> {

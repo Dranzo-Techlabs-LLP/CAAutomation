@@ -5,6 +5,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequestUser } from '../common/types/request-user';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UserResponseDto } from './dto/user-response.dto';
@@ -20,6 +21,15 @@ export class UsersController {
   @Get('me')
   async me(@CurrentUser() user: RequestUser): Promise<UserResponseDto> {
     return this.usersService.getByIdForFirm(user.id, user.firmId);
+  }
+
+  @Patch('me/change-password')
+  async changeOwnPassword(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: ChangePasswordDto,
+  ): Promise<{ message: string }> {
+    await this.usersService.changeOwnPassword(user.id, dto.currentPassword, dto.newPassword);
+    return { message: 'Password changed successfully' };
   }
 
   @Post()

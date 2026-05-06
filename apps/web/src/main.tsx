@@ -4,8 +4,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, Bell, BookOpen, CalendarDays, ClipboardList,
-  FileText, Inbox, LogOut, Menu, Moon, Repeat, Settings, Shield, ShieldCheck, Sun, Users, UsersRound, Workflow, X,
+  FileText, Inbox, KeyRound, LogOut, Menu, Moon, Repeat, Settings, Shield, ShieldCheck, Sun, Users, UsersRound, Workflow, X,
 } from 'lucide-react';
+import { useState } from 'react';
+import { api } from './lib/api';
 import { useAuth } from './lib/auth';
 import { useUiStore } from './lib/ui-store';
 import LoginPage from './pages/LoginPage';
@@ -69,6 +71,32 @@ function AppShell() {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [cpForm, setCpForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [cpError, setCpError] = useState('');
+  const [cpSuccess, setCpSuccess] = useState('');
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCpError('');
+    setCpSuccess('');
+    if (cpForm.newPassword !== cpForm.confirmPassword) {
+      setCpError('New passwords do not match');
+      return;
+    }
+    try {
+      await api('/users/me/change-password', {
+        method: 'PATCH',
+        body: JSON.stringify({ currentPassword: cpForm.currentPassword, newPassword: cpForm.newPassword }),
+      });
+      setCpSuccess('Password changed successfully');
+      setCpForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setTimeout(() => { setShowChangePw(false); setCpSuccess(''); }, 2000);
+    } catch (err: unknown) {
+      setCpError(err instanceof Error ? err.message : 'Failed to change password');
+    }
   };
 
   if (loading) {
@@ -153,6 +181,13 @@ function AppShell() {
               <p className="truncate text-[10px] text-muted-foreground">{user.roleName || 'User'}</p>
             </div>
           </div>
+          <button
+            onClick={() => { setShowChangePw(true); setCpForm({ currentPassword: '', newPassword: '', confirmPassword: '' }); setCpError(''); setCpSuccess(''); }}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent transition-colors"
+          >
+            <KeyRound className="h-4 w-4" />
+            <span>Change Password</span>
+          </button>
           <button onClick={handleLogout} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-colors">
             <LogOut className="h-4 w-4" />
             <span>Sign out</span>
@@ -199,6 +234,66 @@ function AppShell() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      {/* Change Password Modal */}
+      {showChangePw && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowChangePw(false)}>
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
+            <h3 className="mb-1 text-lg font-semibold">Change Password</h3>
+            <p className="mb-4 text-sm text-muted-foreground">Update your account password</p>
+            {cpSuccess && (
+              <div className="mb-3 rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
+                {cpSuccess}
+              </div>
+            )}
+            {cpError && (
+              <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
+                {cpError}
+              </div>
+            )}
+            <form onSubmit={handleChangePassword} className="space-y-3">
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Current Password</label>
+                <input
+                  type="password"
+                  className="input-field"
+                  value={cpForm.currentPassword}
+                  onChange={(e) => setCpForm({ ...cpForm, currentPassword: e.target.value })}
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">New Password</label>
+                <input
+                  type="password"
+                  className="input-field"
+                  value={cpForm.newPassword}
+                  onChange={(e) => setCpForm({ ...cpForm, newPassword: e.target.value })}
+                  minLength={8}
+                  required
+                  placeholder="Min 8 characters"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Confirm New Password</label>
+                <input
+                  type="password"
+                  className="input-field"
+                  value={cpForm.confirmPassword}
+                  onChange={(e) => setCpForm({ ...cpForm, confirmPassword: e.target.value })}
+                  minLength={8}
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" className="secondary-button" onClick={() => setShowChangePw(false)}>Cancel</button>
+                <button type="submit" className="primary-button">Change Password</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
