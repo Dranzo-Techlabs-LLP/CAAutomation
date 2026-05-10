@@ -43,6 +43,8 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { ServiceCatalog } from './services-catalog/service-catalog.entity';
 import { ServiceSubtaskTemplate } from './services-catalog/service-subtask-template.entity';
 import { ServicesCatalogModule } from './services-catalog/services-catalog.module';
+import { TaskStatusEntity } from './task-statuses/task-status.entity';
+import { TaskStatusesModule } from './task-statuses/task-statuses.module';
 import { TaskComment } from './task-comments/task-comment.entity';
 import { TaskCommentsModule } from './task-comments/task-comments.module';
 import { Task } from './tasks/task.entity';
@@ -91,6 +93,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
           Enquiry,
           ServiceCatalog,
           ServiceSubtaskTemplate,
+          TaskStatusEntity,
           Task,
           TaskComment,
           Attachment,
@@ -156,6 +159,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     AutomationRulesModule,
     SettingsModule,
     ReportsModule,
+    TaskStatusesModule,
   ],
 })
 export class AppModule {}

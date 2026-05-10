@@ -17,4 +17,12 @@ export class AuditService {
   async list(firmId: string): Promise<AuditLog[]> {
     return this.auditRepository.find({ where: { firmId }, order: { createdAt: 'DESC' }, take: 200 });
   }
+
+  async listForEntity(firmId: string, entityType: string, entityId: string, limit = 200): Promise<AuditLog[]> {
+    return this.auditRepository.find({
+      where: { firmId, entityType, entityId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
 }

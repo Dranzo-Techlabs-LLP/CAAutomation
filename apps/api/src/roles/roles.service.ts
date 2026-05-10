@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Permission } from '../permissions/permission.entity';
@@ -76,6 +76,26 @@ export class RolesService {
 
     await this.replacePermissions(roleId, permissionIds, actorUserId);
     return this.toResponse(role);
+  }
+
+  async rename(firmId: string, roleId: string, name: string, actorUserId: string): Promise<RoleResponseDto> {
+    const role = await this.roleRepository.findOne({ where: { id: roleId, firmId } });
+    if (!role) throw new NotFoundException('Role not found');
+    if (role.isSystemRole) throw new BadRequestException('System roles cannot be renamed');
+    const dup = await this.roleRepository.findOne({ where: { firmId, name } });
+    if (dup && dup.id !== roleId) throw new ConflictException('Role name already exists');
+    role.name = name;
+    role.updatedBy = actorUserId;
+    await this.roleRepository.save(role);
+    return this.toResponse(role);
+  }
+
+  async delete(firmId: string, roleId: string): Promise<void> {
+    const role = await this.roleRepository.findOne({ where: { id: roleId, firmId } });
+    if (!role) throw new NotFoundException('Role not found');
+    if (role.isSystemRole) throw new BadRequestException('System roles cannot be deleted');
+    await this.rolePermissionRepository.delete({ roleId });
+    await this.roleRepository.remove(role);
   }
 
   private async replacePermissions(

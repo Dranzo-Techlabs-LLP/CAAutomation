@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, LessThan, Repository } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { ServiceSubtaskTemplate } from '../services-catalog/service-subtask-template.entity';
@@ -17,7 +18,43 @@ export class TasksService {
     private readonly taskRepository: Repository<Task>,
     @InjectRepository(ServiceSubtaskTemplate)
     private readonly templateRepository: Repository<ServiceSubtaskTemplate>,
+    @Optional() @Inject(AuditService) private readonly audit?: AuditService,
   ) {}
+
+  private async writeAudit(action: string, firmId: string, taskId: string, userId: string, before?: Record<string, unknown> | null, after?: Record<string, unknown> | null): Promise<void> {
+    if (!this.audit) return;
+    try {
+      await this.audit.write({
+        firmId,
+        userId,
+        action,
+        entityType: 'task',
+        entityId: taskId,
+        beforeJson: before ?? null,
+        afterJson: after ?? null,
+        ip: null,
+        userAgent: null,
+      });
+    } catch {
+      // Don't fail task ops on audit failure
+    }
+  }
+
+  private snapshot(t: Task): Record<string, unknown> {
+    return {
+      title: t.title,
+      description: t.description ?? null,
+      status: t.status,
+      priority: t.priority,
+      assignedToUserId: t.assignedToUserId ?? null,
+      assignedTeamId: t.assignedTeamId ?? null,
+      dueDate: t.dueDate?.toISOString() ?? null,
+      staffDueDate: t.staffDueDate?.toISOString() ?? null,
+      reviewDate: t.reviewDate?.toISOString() ?? null,
+      clientDueDate: t.clientDueDate?.toISOString() ?? null,
+      resolution: t.resolution ?? null,
+    };
+  }
 
   async create(firmId: string, dto: CreateTaskDto, actorUserId: string): Promise<TaskResponseDto> {
     const assigned = Boolean(dto.assignedToUserId || dto.assignedTeamId);
@@ -34,12 +71,10 @@ export class TasksService {
       updatedBy: actorUserId,
     });
     const saved = await this.taskRepository.save(task);
+    await this.writeAudit('task.created', firmId, saved.id, actorUserId, null, this.snapshot(saved));
 
     // Auto-create subtasks from service templates if (a) parent task,
     // (b) linked to a service, and (c) caller did not opt out.
-    // Subtask creation is skipped automatically if the task itself is a subtask
-    // (parentTaskId set) to avoid recursive creation, and when the source is
-    // recurrence/workflow which manage their own children.
     if (
       saved.serviceId &&
       !saved.parentTaskId &&
@@ -100,6 +135,7 @@ export class TasksService {
 
   async update(firmId: string, id: string, dto: UpdateTaskDto, actorUserId: string): Promise<TaskResponseDto> {
     const task = await this.getEntityOrFail(firmId, id);
+    const before = this.snapshot(task);
     if (dto.title !== undefined) task.title = dto.title;
     if (dto.description !== undefined) task.description = dto.description;
     if (dto.priority !== undefined) task.priority = dto.priority;
@@ -111,23 +147,29 @@ export class TasksService {
     if (dto.clientDueDate !== undefined) task.clientDueDate = dto.clientDueDate ? new Date(dto.clientDueDate) : null;
     if (dto.resolution !== undefined) task.resolution = dto.resolution;
     task.updatedBy = actorUserId;
-    return this.toResponse(await this.taskRepository.save(task));
+    const saved = await this.taskRepository.save(task);
+    await this.writeAudit('task.updated', firmId, saved.id, actorUserId, before, this.snapshot(saved));
+    return this.toResponse(saved);
   }
 
   async delete(firmId: string, id: string): Promise<void> {
     const task = await this.getEntityOrFail(firmId, id);
-    // Cascade-delete subtasks when removing parent
+    const before = this.snapshot(task);
     await this.taskRepository.delete({ firmId, parentTaskId: id });
     await this.taskRepository.remove(task);
+    await this.writeAudit('task.deleted', firmId, id, '', before, null);
   }
 
-  async updateStatus(firmId: string, id: string, status: TaskStatus, actorUserId: string): Promise<TaskResponseDto> {
+  async updateStatus(firmId: string, id: string, status: string, actorUserId: string): Promise<TaskResponseDto> {
     const task = await this.getEntityOrFail(firmId, id);
-    task.status = status;
-    task.startedAt = status === TaskStatus.InProgress && !task.startedAt ? new Date() : task.startedAt;
-    task.completedAt = status === TaskStatus.Completed ? new Date() : task.completedAt;
+    const prev = task.status;
+    task.status = status as TaskStatus;
+    if (status === TaskStatus.InProgress && !task.startedAt) task.startedAt = new Date();
+    if (status === TaskStatus.Completed) task.completedAt = new Date();
     task.updatedBy = actorUserId;
-    return this.toResponse(await this.taskRepository.save(task));
+    const saved = await this.taskRepository.save(task);
+    await this.writeAudit('task.status_changed', firmId, saved.id, actorUserId, { status: prev }, { status: saved.status });
+    return this.toResponse(saved);
   }
 
   async updateResolution(
@@ -137,13 +179,16 @@ export class TasksService {
     actorUserId: string,
   ): Promise<TaskResponseDto> {
     const task = await this.getEntityOrFail(firmId, id);
+    const before = this.snapshot(task);
     task.resolution = dto.resolution;
     if (dto.status) {
-      task.status = dto.status;
+      task.status = dto.status as TaskStatus;
       task.completedAt = dto.status === TaskStatus.Completed ? new Date() : task.completedAt;
     }
     task.updatedBy = actorUserId;
-    return this.toResponse(await this.taskRepository.save(task));
+    const saved = await this.taskRepository.save(task);
+    await this.writeAudit('task.resolution_added', firmId, saved.id, actorUserId, before, this.snapshot(saved));
+    return this.toResponse(saved);
   }
 
   async assign(

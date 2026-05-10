@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
-import { TaskStatus } from '../task.entity';
+import { IsString, MaxLength } from 'class-validator';
 
 export class UpdateTaskStatusDto {
-  @ApiProperty({ enum: TaskStatus })
-  @IsEnum(TaskStatus)
-  status!: TaskStatus;
+  @ApiProperty({ description: 'Status code (custom statuses supported)' })
+  @IsString()
+  @MaxLength(60)
+  status!: string;
 }

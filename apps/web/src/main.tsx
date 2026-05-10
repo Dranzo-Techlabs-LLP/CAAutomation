@@ -26,6 +26,7 @@ import ComplianceCalendarPage from './pages/ComplianceCalendarPage';
 import WorkflowsPage from './pages/WorkflowsPage';
 import ReportsPage from './pages/ReportsPage';
 import PaymentAdvicesPage from './pages/PaymentAdvicesPage';
+import RolesPage from './pages/RolesPage';
 import SettingsPage from './pages/SettingsPage';
 import './styles.css';
 
@@ -55,7 +56,8 @@ const NAV: NavEntry[] = [
   { path: '/notifications', label: 'Notifications', icon: <Bell />, section: 'system' },
   { path: '/audit', label: 'Audit Logs', icon: <Shield />, permission: 'audit.view', section: 'system' },
   { path: '/settings', label: 'Settings', icon: <Settings />, permission: 'settings.edit', section: 'system' },
-  { path: '/admin/users', label: 'Users & Roles', icon: <Shield />, permission: 'user.view', section: 'system' },
+  { path: '/admin/users', label: 'Users', icon: <Users />, permission: 'user.view', section: 'system' },
+  { path: '/admin/roles', label: 'Roles & Permissions', icon: <Shield />, permission: 'role.view', section: 'system' },
 ];
 
 const SECTION_LABELS: Record<string, string> = {
@@ -237,6 +239,7 @@ function AppShell() {
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin/users" element={<UsersPage />} />
+          <Route path="/admin/roles" element={<RolesPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

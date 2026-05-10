@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -19,5 +19,17 @@ export class AuditController {
   @Permissions('audit.view')
   list(@CurrentUser() user: RequestUser): Promise<AuditLog[]> {
     return this.auditService.list(user.firmId);
+  }
+
+  // Per-entity history (e.g. task timeline). Anyone with task.view can read.
+  @Get('entity/:entityType/:entityId')
+  @Permissions('task.view')
+  forEntity(
+    @CurrentUser() user: RequestUser,
+    @Param('entityType') entityType: string,
+    @Param('entityId') entityId: string,
+    @Query('limit') limit?: string,
+  ): Promise<AuditLog[]> {
+    return this.auditService.listForEntity(user.firmId, entityType, entityId, limit ? Math.min(Number(limit), 500) : 200);
   }
 }

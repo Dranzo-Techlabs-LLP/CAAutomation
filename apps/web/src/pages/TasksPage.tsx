@@ -24,6 +24,8 @@ interface Comment { id: string; userId: string; body: string; createdAt: string;
 interface Attachment { id: string; fileName: string; fileUrl: string; mimeType: string; sizeBytes: string; tag: string; createdAt: string; uploadedByUserId: string; }
 interface TimeLogEntry { id: string; userId: string; startedAt: string; endedAt?: string; durationMinutes?: number; notes?: string; isBillable: boolean; }
 interface Subtask { id: string; title: string; description?: string | null; status: string; priority: string; assignedToUserId?: string | null; dueDate?: string | null; }
+interface TaskStatusDef { id: string; code: string; label: string; color?: string | null; sortOrder: number; isInitial: boolean; isTerminal: boolean; isSystem: boolean; }
+interface AuditEntry { id: string; userId?: string | null; action: string; entityType: string; entityId: string; beforeJson?: Record<string, unknown> | null; afterJson?: Record<string, unknown> | null; createdAt: string; }
 
 /* ── Constants ── */
 const STATUSES = ['unassigned', 'assigned', 'in_progress', 'on_hold', 'review', 'completed', 'cancelled'];
@@ -48,7 +50,40 @@ const PRIORITY_DOT: Record<string, string> = { low: 'bg-gray-400', medium: 'bg-b
 const PRIORITY_COLORS: Record<string, string> = { low: 'text-gray-500', medium: 'text-blue-600', high: 'text-orange-600', urgent: 'text-red-600 font-bold' };
 
 type ViewMode = 'list' | 'kanban';
-type DetailTab = 'details' | 'subtasks' | 'comments' | 'attachments' | 'efforts';
+type DetailTab = 'details' | 'subtasks' | 'comments' | 'attachments' | 'efforts' | 'history';
+
+// Map color hint (Tailwind fragment or hex) to background+text classes
+function colorChipClasses(color?: string | null): string {
+  const c = (color || '').toLowerCase();
+  const map: Record<string, string> = {
+    gray: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    orange: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+    purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
+    green: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+    red: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+    teal: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300',
+    indigo: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
+  };
+  return map[c] || 'bg-accent text-foreground';
+}
+
+function colorBorderClass(color?: string | null): string {
+  const c = (color || '').toLowerCase();
+  const map: Record<string, string> = {
+    gray: 'border-gray-300 dark:border-gray-600',
+    blue: 'border-blue-400 dark:border-blue-500',
+    amber: 'border-amber-400 dark:border-amber-500',
+    orange: 'border-orange-400 dark:border-orange-500',
+    purple: 'border-purple-400 dark:border-purple-500',
+    green: 'border-green-500 dark:border-green-400',
+    red: 'border-red-400 dark:border-red-500',
+    teal: 'border-teal-400 dark:border-teal-500',
+    indigo: 'border-indigo-400 dark:border-indigo-500',
+  };
+  return map[c] || 'border-border';
+}
 
 /* ── Main Page ── */
 export default function TasksPage() {
@@ -66,6 +101,11 @@ export default function TasksPage() {
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
   const [services, setServices] = useState<{ id: string; name: string }[]>([]);
   const [teams, setTeams] = useState<{ id: string; name: string }[]>([]);
+  const [statuses, setStatuses] = useState<TaskStatusDef[]>([]);
+  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
+  const [dragTaskId, setDragTaskId] = useState<string | null>(null);
+  const [logTimeFor, setLogTimeFor] = useState<{ task: Task; targetStatus: string } | null>(null);
+  const [logTimeForm, setLogTimeForm] = useState({ hours: '', minutes: '', notes: '' });
   const [showForm, setShowForm] = useState(false);
   const [filter, setFilter] = useState('all');
   const [filterCustomer, setFilterCustomer] = useState('');
@@ -97,6 +137,7 @@ export default function TasksPage() {
     api<{ id: string; name: string }[]>('/users').then(setUsers).catch(() => setUsers([]));
     api<{ id: string; name: string }[]>('/services-catalog').then(setServices).catch(() => {});
     api<{ id: string; name: string }[]>('/teams').then(setTeams).catch(() => setTeams([]));
+    api<TaskStatusDef[]>('/task-statuses').then(setStatuses).catch(() => setStatuses([]));
   }, [load]);
 
   const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '' }); setShowForm(false); setError(''); };
@@ -122,6 +163,73 @@ export default function TasksPage() {
   const updateStatus = async (taskId: string, status: string) => {
     try { await api(`/tasks/${taskId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }); load(); }
     catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
+  };
+
+  // Drag-drop status change with time-log gate when moving to a terminal status
+  const onCardDragStart = (taskId: string) => (e: React.DragEvent) => {
+    setDragTaskId(taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', taskId);
+  };
+  const onColumnDragOver = (status: string) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverStatus !== status) setDragOverStatus(status);
+  };
+  const onColumnDragLeave = () => setDragOverStatus(null);
+  const onColumnDrop = (status: string) => async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverStatus(null);
+    const id = dragTaskId || e.dataTransfer.getData('text/plain');
+    setDragTaskId(null);
+    if (!id) return;
+    const t = tasks.find((x) => x.id === id);
+    if (!t || t.status === status) return;
+    const target = statuses.find((s) => s.code === status);
+    // Time-log gate: if moving to a terminal state and no time logs yet, prompt
+    if (target?.isTerminal) {
+      try {
+        const logs = await api<{ id: string; durationMinutes?: number }[]>(`/time-logs/task/${id}`);
+        const total = logs.reduce((s, l) => s + (l.durationMinutes || 0), 0);
+        if (total === 0) {
+          setLogTimeFor({ task: t, targetStatus: status });
+          setLogTimeForm({ hours: '', minutes: '', notes: '' });
+          return;
+        }
+      } catch { /* if time-logs endpoint fails, allow status change */ }
+    }
+    await updateStatus(id, status);
+  };
+
+  const submitLogTimeAndClose = async () => {
+    if (!logTimeFor) return;
+    const totalMin = (Number(logTimeFor && logTimeForm.hours) || 0) * 60 + (Number(logTimeForm.minutes) || 0);
+    if (totalMin <= 0) { alert('Enter time spent (hours / minutes)'); return; }
+    try {
+      const now = new Date();
+      const start = new Date(now.getTime() - totalMin * 60000);
+      await api('/time-logs', {
+        method: 'POST',
+        body: JSON.stringify({
+          taskId: logTimeFor.task.id,
+          startedAt: start.toISOString(),
+          endedAt: now.toISOString(),
+          notes: logTimeForm.notes || undefined,
+          isBillable: true,
+        }),
+      });
+      await updateStatus(logTimeFor.task.id, logTimeFor.targetStatus);
+      setLogTimeFor(null);
+      setLogTimeForm({ hours: '', minutes: '', notes: '' });
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed to log time');
+    }
+  };
+
+  const skipLogAndClose = async () => {
+    if (!logTimeFor) return;
+    await updateStatus(logTimeFor.task.id, logTimeFor.targetStatus);
+    setLogTimeFor(null);
   };
 
   const updateResolution = async (taskId: string, resolution: string) => {
@@ -210,17 +318,30 @@ export default function TasksPage() {
       {/* Kanban */}
       {!loading && viewMode === 'kanban' && (
         <div className="flex gap-3 overflow-x-auto pb-4" style={{ minHeight: '60vh' }}>
-          {STATUSES.map((status) => {
-            const col = tasks.filter((t) => t.status === status);
+          {(statuses.length ? statuses : STATUSES.map((s, i) => ({ id: s, code: s, label: s.replace(/_/g, ' '), color: null, sortOrder: i, isInitial: false, isTerminal: s === 'completed' || s === 'cancelled', isSystem: true }))).map((status) => {
+            const col = filtered.filter((t) => t.status === status.code);
+            const isOver = dragOverStatus === status.code;
             return (
-              <div key={status} className="flex w-72 min-w-[18rem] flex-shrink-0 flex-col rounded-lg bg-accent/30 dark:bg-accent/10">
-                <div className={`flex items-center justify-between border-b-2 ${STATUS_HEADER_COLORS[status] || ''} px-3 py-2.5`}>
-                  <span className="text-xs font-semibold uppercase tracking-wide">{status.replace(/_/g, ' ')}</span>
+              <div
+                key={status.id}
+                className={`flex w-72 min-w-[18rem] flex-shrink-0 flex-col rounded-lg bg-accent/30 dark:bg-accent/10 transition-all ${isOver ? 'ring-2 ring-primary scale-[1.01]' : ''}`}
+                onDragOver={onColumnDragOver(status.code)}
+                onDragLeave={onColumnDragLeave}
+                onDrop={onColumnDrop(status.code)}
+              >
+                <div className={`flex items-center justify-between border-b-2 ${colorBorderClass(status.color)} px-3 py-2.5`}>
+                  <span className="text-xs font-semibold uppercase tracking-wide capitalize">{status.label}{status.isTerminal && <span className="ml-1 text-[9px] text-muted-foreground" title="Terminal state — time-log prompt on drop">●</span>}</span>
                   <span className="rounded-full bg-background px-2 py-0.5 text-[13px] font-medium text-muted-foreground">{col.length}</span>
                 </div>
                 <div className="flex-1 space-y-2 overflow-y-auto p-2" style={{ maxHeight: 'calc(60vh - 48px)' }}>
                   {col.map((task) => (
-                    <div key={task.id} className="cursor-pointer rounded-md border border-border bg-background p-3 shadow-sm transition-all hover:shadow-md" onClick={() => setSelectedTask(task)}>
+                    <div
+                      key={task.id}
+                      draggable={canEdit}
+                      onDragStart={onCardDragStart(task.id)}
+                      onClick={() => setSelectedTask(task)}
+                      className={`cursor-pointer rounded-md border border-border bg-background p-3 shadow-sm transition-all hover:shadow-md ${dragTaskId === task.id ? 'opacity-50' : ''}`}
+                    >
                       <div className="mb-2 flex items-start justify-between gap-1">
                         <h4 className="text-sm font-medium leading-tight">{task.title}</h4>
                         <span className={`mt-0.5 inline-block h-2 w-2 flex-shrink-0 rounded-full ${PRIORITY_DOT[task.priority] || 'bg-gray-400'}`} title={task.priority} />
@@ -232,7 +353,7 @@ export default function TasksPage() {
                       </div>
                     </div>
                   ))}
-                  {col.length === 0 && <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">No tasks</div>}
+                  {col.length === 0 && <div className="rounded-md border border-dashed border-border p-4 text-center text-xs text-muted-foreground">{isOver ? 'Drop here' : 'No tasks'}</div>}
                 </div>
               </div>
             );
@@ -258,8 +379,11 @@ export default function TasksPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={`rounded px-2 py-1 text-xs font-medium ${STATUS_COLORS[task.status] || 'bg-accent'}`}>{task.status.replace(/_/g, ' ')}</span>
-                {canEdit && <select className="input-field text-xs" value={task.status} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStatus(task.id, e.target.value)}>{STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}</select>}
+                {(() => {
+                  const sd = statuses.find((s) => s.code === task.status);
+                  return <span className={`rounded px-2 py-1 text-xs font-medium ${sd ? colorChipClasses(sd.color) : (STATUS_COLORS[task.status] || 'bg-accent')}`}>{sd?.label || task.status.replace(/_/g, ' ')}</span>;
+                })()}
+                {canEdit && <select className="input-field text-xs" value={task.status} onClick={(e) => e.stopPropagation()} onChange={(e) => updateStatus(task.id, e.target.value)}>{(statuses.length ? statuses.map((s) => ({ value: s.code, label: s.label })) : STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, ' ') }))).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}</select>}
               </div>
             </div>
           ))}
@@ -294,6 +418,44 @@ export default function TasksPage() {
           onClose={() => { setSelectedTask(null); load(); }}
         />
       )}
+
+      {/* Log time gate modal — fires when dragging to a terminal status without time logged */}
+      {logTimeFor && (
+        <div className="modal-overlay" onClick={() => setLogTimeFor(null)} role="dialog" aria-modal="true" aria-labelledby="logtime-title">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">Action required</span>
+                <h3 id="logtime-title" className="modal-title">Log time before closing?</h3>
+                <p className="modal-subtitle">No time has been logged on <span className="font-semibold">{logTimeFor.task.title}</span>. Record the effort spent before moving to <span className="font-semibold">{statuses.find((s) => s.code === logTimeFor.targetStatus)?.label || logTimeFor.targetStatus}</span>.</p>
+              </div>
+              <button className="modal-close" onClick={() => setLogTimeFor(null)} aria-label="Close">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="modal-body space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="field-label">Hours</label>
+                  <input type="number" min="0" className="input-field" value={logTimeForm.hours} onChange={(e) => setLogTimeForm({ ...logTimeForm, hours: e.target.value })} placeholder="0" />
+                </div>
+                <div>
+                  <label className="field-label">Minutes</label>
+                  <input type="number" min="0" max="59" className="input-field" value={logTimeForm.minutes} onChange={(e) => setLogTimeForm({ ...logTimeForm, minutes: e.target.value })} placeholder="30" />
+                </div>
+              </div>
+              <div>
+                <label className="field-label">Notes (optional)</label>
+                <textarea className="input-field" rows={2} value={logTimeForm.notes} onChange={(e) => setLogTimeForm({ ...logTimeForm, notes: e.target.value })} placeholder="Brief description of work done" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary-button" onClick={skipLogAndClose}>Skip & Close anyway</button>
+              <button type="button" className="primary-button" onClick={submitLogTimeAndClose}>Log Time & Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -315,6 +477,8 @@ function TaskDetailPanel({
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [newSubtask, setNewSubtask] = useState({ title: '', assignedToUserId: '', dueDate: '' });
+  const [history, setHistory] = useState<AuditEntry[]>([]);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [commentText, setCommentText] = useState('');
   const [resolution, setResolution] = useState(task.resolution || '');
   const [editingResolution, setEditingResolution] = useState(false);
@@ -341,12 +505,14 @@ function TaskDetailPanel({
   const loadAttachments = () => api<Attachment[]>(`/attachments/task/${task.id}`).then(setAttachments).catch(() => {});
   const loadTimeLogs = () => api<TimeLogEntry[]>(`/time-logs/task/${task.id}`).then(setTimeLogs).catch(() => {});
   const loadSubtasks = () => api<Subtask[]>(`/tasks/${task.id}/subtasks`).then(setSubtasks).catch(() => {});
+  const loadHistory = () => api<AuditEntry[]>(`/audit-logs/entity/task/${task.id}`).then(setHistory).catch(() => setHistory([]));
 
   useEffect(() => {
     loadComments();
     loadAttachments();
     loadTimeLogs();
     loadSubtasks();
+    loadHistory();
   }, [task.id]);
 
   const addSubtask = async (e: React.FormEvent) => {
@@ -477,6 +643,7 @@ function TaskDetailPanel({
     { key: 'comments', label: 'Discussion', count: comments.length },
     { key: 'attachments', label: 'Attachments', count: attachments.length },
     { key: 'efforts', label: 'Efforts', count: timeLogs.length },
+    { key: 'history', label: 'History', count: history.length },
   ];
 
   return (
@@ -873,9 +1040,25 @@ function TaskDetailPanel({
                       </div>
                     </div>
                     {a.fileUrl && (
-                      <a href={a.fileUrl} target="_blank" rel="noopener noreferrer" className="ml-2 rounded-md border border-border px-2 py-1 text-xs text-primary hover:bg-accent" onClick={(e) => e.stopPropagation()}>
-                        {a.fileUrl.startsWith('data:') ? 'Download' : 'Open'}
-                      </a>
+                      <div className="ml-2 flex items-center gap-1">
+                        <button
+                          className="rounded-md border border-border px-2 py-1 text-xs text-primary hover:bg-accent"
+                          onClick={(e) => { e.stopPropagation(); setPreviewAttachment(a); }}
+                          title="Preview in app"
+                        >
+                          View
+                        </button>
+                        <a
+                          href={a.fileUrl}
+                          download={a.fileName}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {a.fileUrl.startsWith('data:') ? 'Download' : 'Open'}
+                        </a>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -965,6 +1148,138 @@ function TaskDetailPanel({
                 })}
                 {timeLogs.length === 0 && <p className="py-6 text-center text-xs text-muted-foreground">No time entries logged yet</p>}
               </div>
+            </div>
+          )}
+
+          {/* History Tab */}
+          {tab === 'history' && (
+            <div className="space-y-3">
+              {history.length === 0 ? (
+                <p className="py-12 text-center text-sm text-muted-foreground">No activity yet for this task.</p>
+              ) : (
+                <ol className="relative ml-2 border-l border-border">
+                  {history.map((h) => {
+                    const actionLabel: Record<string, string> = {
+                      'task.created': 'Created task',
+                      'task.updated': 'Updated task',
+                      'task.status_changed': 'Status changed',
+                      'task.resolution_added': 'Resolution updated',
+                      'task.deleted': 'Deleted task',
+                    };
+                    const actorName = h.userId ? (userMap[h.userId] || 'Someone') : 'System';
+                    // Compute diff display
+                    const before = (h.beforeJson || {}) as Record<string, unknown>;
+                    const after = (h.afterJson || {}) as Record<string, unknown>;
+                    const fields = new Set([...Object.keys(before), ...Object.keys(after)]);
+                    const diffs: { field: string; from: unknown; to: unknown }[] = [];
+                    fields.forEach((f) => {
+                      const b = before[f]; const a = after[f];
+                      if (JSON.stringify(b) !== JSON.stringify(a)) diffs.push({ field: f, from: b, to: a });
+                    });
+                    const renderVal = (v: unknown) => {
+                      if (v === null || v === undefined || v === '') return <em className="text-muted-foreground">empty</em>;
+                      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return new Date(v).toLocaleString('en-IN');
+                      if (typeof v === 'string' && userMap[v]) return userMap[v];
+                      return String(v);
+                    };
+                    return (
+                      <li key={h.id} className="mb-4 ml-4">
+                        <div className="absolute -left-1.5 mt-1.5 h-3 w-3 rounded-full border border-primary bg-background" />
+                        <div className="rounded-lg border border-border bg-panel p-3">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <div className="text-sm">
+                              <span className="font-semibold text-foreground">{actorName}</span>
+                              <span className="ml-1 text-muted-foreground">— {actionLabel[h.action] || h.action}</span>
+                            </div>
+                            <span className="text-[10.5px] text-muted-foreground">{new Date(h.createdAt).toLocaleString('en-IN')}</span>
+                          </div>
+                          {diffs.length > 0 && (
+                            <ul className="mt-2 space-y-0.5 text-[11.5px]">
+                              {diffs.map((d) => (
+                                <li key={d.field} className="text-muted-foreground">
+                                  <span className="font-medium text-foreground capitalize">{d.field.replace(/([A-Z])/g, ' $1')}:</span>{' '}
+                                  {renderVal(d.from)} <span className="text-muted-foreground/60">→</span> <span className="font-medium text-foreground">{renderVal(d.to)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Attachment preview modal */}
+      {previewAttachment && (
+        <AttachmentPreview attachment={previewAttachment} onClose={() => setPreviewAttachment(null)} />
+      )}
+    </div>
+  );
+}
+
+// ── Attachment preview component ─────────────────────────────────────────────
+function AttachmentPreview({ attachment, onClose }: { attachment: Attachment; onClose: () => void }) {
+  const url = attachment.fileUrl;
+  const mime = (attachment.mimeType || '').toLowerCase();
+  const ext = (attachment.fileName.split('.').pop() || '').toLowerCase();
+  const isImage = mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+  const isPdf = mime === 'application/pdf' || ext === 'pdf';
+  const isOffice = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext) || mime.includes('officedocument') || mime.includes('msword') || mime.includes('excel');
+  const isText = mime.startsWith('text/') || ['txt', 'csv', 'log', 'md', 'json', 'xml'].includes(ext);
+  const isDataUrl = url.startsWith('data:');
+  const officeViewerUrl = !isDataUrl && isOffice
+    ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
+    : null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal-card modal-xl" onClick={(e) => e.stopPropagation()} style={{ height: 'calc(100dvh - 64px)' }}>
+        <div className="modal-header">
+          <div className="min-w-0">
+            <span className="modal-eyebrow">Attachment</span>
+            <h3 className="modal-title truncate">{attachment.fileName}</h3>
+            <p className="modal-subtitle">{attachment.mimeType || 'unknown type'} · {Number(attachment.sizeBytes) > 0 ? `${(Number(attachment.sizeBytes) / 1024).toFixed(1)} KB` : 'size unknown'}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <a href={url} download={attachment.fileName} className="secondary-button text-xs">Download</a>
+            <button className="modal-close" onClick={onClose} aria-label="Close">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+        <div className="modal-body is-flush" style={{ padding: 0 }}>
+          {isImage && (
+            <div className="flex h-full items-center justify-center bg-black/80 p-4">
+              <img src={url} alt={attachment.fileName} className="max-h-full max-w-full object-contain" />
+            </div>
+          )}
+          {isPdf && (
+            <iframe title={attachment.fileName} src={url} className="h-full w-full border-0" />
+          )}
+          {isText && !isImage && !isPdf && (
+            <div className="h-full overflow-auto bg-background p-4">
+              <iframe title={attachment.fileName} src={url} className="h-full w-full border-0 bg-white" />
+            </div>
+          )}
+          {isOffice && officeViewerUrl && (
+            <iframe title={attachment.fileName} src={officeViewerUrl} className="h-full w-full border-0" />
+          )}
+          {isOffice && !officeViewerUrl && (
+            <div className="flex h-full flex-col items-center justify-center gap-3 p-12 text-center">
+              <p className="text-sm font-medium text-foreground">Office documents (DOC / XLS / PPT) cannot be previewed when uploaded as inline files.</p>
+              <p className="max-w-md text-[12px] text-muted-foreground">Upload the file to a public URL (e.g. cloud storage) so the Microsoft Office viewer can render it, or download below to open in your local app.</p>
+              <a href={url} download={attachment.fileName} className="primary-button text-xs">Download File</a>
+            </div>
+          )}
+          {!isImage && !isPdf && !isOffice && !isText && (
+            <div className="flex h-full flex-col items-center justify-center gap-3 p-12 text-center">
+              <p className="text-sm font-medium text-foreground">No inline preview available for this file type.</p>
+              <a href={url} download={attachment.fileName} className="primary-button text-xs">Download File</a>
             </div>
           )}
         </div>

@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
 import { INDIA_STATES, stateCodeFromGstin } from '../lib/billing-utils';
+
+interface TaskStatusDef { id: string; code: string; label: string; color?: string | null; sortOrder: number; isInitial: boolean; isTerminal: boolean; isSystem: boolean; }
+const STATUS_COLORS_OPTS = ['gray', 'blue', 'amber', 'orange', 'purple', 'green', 'red', 'teal', 'indigo'];
+function chipClass(color?: string | null): string {
+  const c = (color || 'gray').toLowerCase();
+  return ({ gray:'bg-gray-100 text-gray-700', blue:'bg-blue-100 text-blue-700', amber:'bg-amber-100 text-amber-700', orange:'bg-orange-100 text-orange-700', purple:'bg-purple-100 text-purple-700', green:'bg-green-100 text-green-800', red:'bg-red-100 text-red-700', teal:'bg-teal-100 text-teal-700', indigo:'bg-indigo-100 text-indigo-700' } as Record<string,string>)[c] || 'bg-accent text-foreground';
+}
 
 interface FirmSettings {
   id: string;
@@ -63,6 +71,10 @@ export default function SettingsPage() {
   const [msg, setMsg] = useState('');
   const [logoPreview, setLogoPreview] = useState('');
   const [signaturePreview, setSignaturePreview] = useState('');
+  const [statuses, setStatuses] = useState<TaskStatusDef[]>([]);
+  const [newStatus, setNewStatus] = useState({ label: '', color: 'gray', isTerminal: false });
+  const [editStatus, setEditStatus] = useState<TaskStatusDef | null>(null);
+  const [statusEditForm, setStatusEditForm] = useState({ label: '', color: 'gray', isTerminal: false, isInitial: false });
 
   useEffect(() => {
     api<FirmSettings>('/settings')
@@ -85,7 +97,64 @@ export default function SettingsPage() {
         if (f.signatureUrl) setSignaturePreview(f.signatureUrl);
       })
       .catch(() => {});
+    api<TaskStatusDef[]>('/task-statuses').then(setStatuses).catch(() => {});
   }, []);
+
+  const reloadStatuses = () => api<TaskStatusDef[]>('/task-statuses').then(setStatuses).catch(() => {});
+
+  const addStatus = async () => {
+    if (!newStatus.label.trim()) return;
+    try {
+      await api('/task-statuses', { method: 'POST', body: JSON.stringify({
+        code: newStatus.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+        label: newStatus.label.trim(),
+        color: newStatus.color,
+        isTerminal: newStatus.isTerminal,
+      }) });
+      setNewStatus({ label: '', color: 'gray', isTerminal: false });
+      reloadStatuses();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const moveStatus = async (idx: number, delta: number) => {
+    const next = [...statuses];
+    const target = idx + delta;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    setStatuses(next);
+    try {
+      await api('/task-statuses/reorder', { method: 'PATCH', body: JSON.stringify({ ids: next.map((s) => s.id) }) });
+    } catch { /* keep optimistic */ }
+  };
+
+  const openEditStatus = (s: TaskStatusDef) => {
+    setEditStatus(s);
+    setStatusEditForm({ label: s.label, color: s.color || 'gray', isTerminal: s.isTerminal, isInitial: s.isInitial });
+  };
+
+  const saveEditStatus = async () => {
+    if (!editStatus) return;
+    try {
+      await api(`/task-statuses/${editStatus.id}`, { method: 'PATCH', body: JSON.stringify(statusEditForm) });
+      setEditStatus(null);
+      reloadStatuses();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const deleteStatus = async (s: TaskStatusDef) => {
+    if (s.isSystem) { alert('System statuses cannot be deleted'); return; }
+    if (!confirm(`Delete status "${s.label}"? Tasks already using this code will keep the value but it will not appear in dropdowns.`)) return;
+    try {
+      await api(`/task-statuses/${s.id}`, { method: 'DELETE' });
+      reloadStatuses();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Delete failed');
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,6 +438,110 @@ export default function SettingsPage() {
           {saving ? 'Saving...' : 'Save Settings'}
         </button>
       </form>
+
+      {/* Task Statuses (separate, has own actions) */}
+      <div className="max-w-2xl">
+        <div className="panel space-y-4">
+          <div>
+            <div className="panel-title">Task Statuses (Kanban Columns)</div>
+            <p className="-mt-2 text-[12px] text-muted-foreground">Customize columns shown on the Tasks Kanban board. Drag-drop tasks between columns updates status. Statuses marked <span className="font-semibold">terminal</span> trigger a time-log prompt when a task is moved into them.</p>
+          </div>
+
+          {/* Add */}
+          <div className="rounded-lg border border-border bg-accent/20 p-3">
+            <div className="grid gap-2 sm:grid-cols-12 items-end">
+              <div className="sm:col-span-5">
+                <label className="field-label">Status Label</label>
+                <input className="input-field" value={newStatus.label} onChange={(e) => setNewStatus({ ...newStatus, label: e.target.value })} placeholder="e.g. Awaiting Client, Filed, Archived" />
+              </div>
+              <div className="sm:col-span-3">
+                <label className="field-label">Color</label>
+                <select className="input-field" value={newStatus.color} onChange={(e) => setNewStatus({ ...newStatus, color: e.target.value })}>
+                  {STATUS_COLORS_OPTS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="sm:col-span-2 flex items-center gap-1">
+                <label className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium">
+                  <input type="checkbox" className="h-3.5 w-3.5" checked={newStatus.isTerminal} onChange={(e) => setNewStatus({ ...newStatus, isTerminal: e.target.checked })} />
+                  Terminal
+                </label>
+              </div>
+              <div className="sm:col-span-2">
+                <button type="button" className="primary-button text-xs w-full" onClick={addStatus}>
+                  <Plus className="h-3.5 w-3.5" /> Add
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="rounded-lg border border-border overflow-hidden">
+            <ul className="divide-y divide-border">
+              {statuses.map((s, idx) => (
+                <li key={s.id} className="flex items-center gap-3 p-3 hover:bg-accent/30">
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10.5px] font-bold text-primary">{idx + 1}</span>
+                  <span className={`rounded px-2 py-0.5 text-[11.5px] font-semibold capitalize ${chipClass(s.color)}`}>{s.label}</span>
+                  <span className="font-mono text-[10.5px] text-muted-foreground">{s.code}</span>
+                  {s.isTerminal && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase text-red-700 dark:bg-red-900/30 dark:text-red-300">terminal</span>}
+                  {s.isInitial && <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">initial</span>}
+                  {s.isSystem && <span className="rounded bg-accent px-1.5 py-0.5 text-[9.5px] font-medium uppercase text-muted-foreground">system</span>}
+                  <div className="ml-auto flex items-center gap-1">
+                    <button className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30" disabled={idx === 0} onClick={() => moveStatus(idx, -1)} title="Move up">↑</button>
+                    <button className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30" disabled={idx === statuses.length - 1} onClick={() => moveStatus(idx, 1)} title="Move down">↓</button>
+                    <button className="rounded p-1 text-muted-foreground hover:bg-accent" onClick={() => openEditStatus(s)} title="Edit"><Pencil className="h-4 w-4" /></button>
+                    {!s.isSystem && <button className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" onClick={() => deleteStatus(s)} title="Delete"><Trash2 className="h-4 w-4" /></button>}
+                  </div>
+                </li>
+              ))}
+              {statuses.length === 0 && <li className="p-6 text-center text-sm text-muted-foreground">Loading…</li>}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit status modal */}
+      {editStatus && (
+        <div className="modal-overlay" onClick={() => setEditStatus(null)} role="dialog" aria-modal="true">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">Status</span>
+                <h3 className="modal-title">Edit {editStatus.label}</h3>
+                <p className="modal-subtitle">Code: <span className="font-mono">{editStatus.code}</span> (immutable)</p>
+              </div>
+              <button className="modal-close" onClick={() => setEditStatus(null)} aria-label="Close">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="modal-body space-y-3">
+              <div>
+                <label className="field-label">Label</label>
+                <input className="input-field" value={statusEditForm.label} onChange={(e) => setStatusEditForm({ ...statusEditForm, label: e.target.value })} />
+              </div>
+              <div>
+                <label className="field-label">Color</label>
+                <select className="input-field" value={statusEditForm.color} onChange={(e) => setStatusEditForm({ ...statusEditForm, color: e.target.value })}>
+                  {STATUS_COLORS_OPTS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+                  <input type="checkbox" className="h-4 w-4" checked={statusEditForm.isTerminal} onChange={(e) => setStatusEditForm({ ...statusEditForm, isTerminal: e.target.checked })} />
+                  Terminal — moving here prompts time-log
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+                  <input type="checkbox" className="h-4 w-4" checked={statusEditForm.isInitial} onChange={(e) => setStatusEditForm({ ...statusEditForm, isInitial: e.target.checked })} />
+                  Initial — default for new tasks
+                </label>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary-button" onClick={() => setEditStatus(null)}>Cancel</button>
+              <button type="button" className="primary-button" onClick={saveEditStatus}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

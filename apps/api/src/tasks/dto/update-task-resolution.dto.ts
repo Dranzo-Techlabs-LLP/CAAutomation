@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { TaskStatus } from '../task.entity';
 
 export class UpdateTaskResolutionDto {
@@ -7,8 +7,9 @@ export class UpdateTaskResolutionDto {
   @IsString()
   resolution!: string;
 
-  @ApiPropertyOptional({ enum: TaskStatus })
+  @ApiPropertyOptional()
   @IsOptional()
-  @IsEnum(TaskStatus)
-  status?: TaskStatus;
+  @IsString()
+  @MaxLength(60)
+  status?: TaskStatus | string;
 }
