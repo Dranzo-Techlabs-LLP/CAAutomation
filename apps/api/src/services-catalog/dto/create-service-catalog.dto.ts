@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsNumberString, IsOptional, IsString, IsUUID } from 'class-validator';
 import { RecurrenceDefault } from '../service-catalog.entity';
 
 export class CreateServiceCatalogDto {
@@ -40,4 +40,14 @@ export class CreateServiceCatalogDto {
   @IsOptional()
   @IsEnum(RecurrenceDefault)
   recurrenceDefault?: RecurrenceDefault;
+
+  @ApiPropertyOptional({ description: 'HSN/SAC code for invoicing' })
+  @IsOptional()
+  @IsString()
+  hsnSac?: string;
+
+  @ApiPropertyOptional({ description: 'Default GST rate %' })
+  @IsOptional()
+  @IsNumberString()
+  defaultGstRate?: string;
 }

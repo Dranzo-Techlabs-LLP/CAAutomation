@@ -7,12 +7,30 @@ const config: Config = {
     extend: {
       colors: {
         border: 'hsl(var(--border))',
+        'border-strong': 'hsl(var(--border-strong))',
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
-        muted: 'hsl(var(--muted))',
-        primary: 'hsl(var(--primary))',
-        accent: 'hsl(var(--accent))',
-        destructive: 'hsl(var(--destructive))',
+        panel: 'hsl(var(--panel))',
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
         success: 'hsl(var(--success))',
         warning: 'hsl(var(--warning))',
         ring: 'hsl(var(--ring))',
@@ -27,6 +45,7 @@ const config: Config = {
         'sm': 'var(--shadow-sm)',
         'md': 'var(--shadow-md)',
         'lg': 'var(--shadow-lg)',
+        'xl': 'var(--shadow-xl)',
       },
     },
   },

@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { GST_RATES, INDIA_STATES, STATE_NAME, TDS_SECTIONS, rupeesToWordsIN, stateCodeFromGstin } from '../lib/billing-utils';
 
 interface LineItem {
   id: string;
@@ -11,6 +12,11 @@ interface LineItem {
   rate: string;
   amount: string;
   hsnSac?: string | null;
+  gstRate?: string;
+  cgstAmount?: string;
+  sgstAmount?: string;
+  igstAmount?: string;
+  cessAmount?: string;
 }
 
 interface Invoice {
@@ -23,11 +29,25 @@ interface Invoice {
   cgst: string;
   sgst: string;
   igst: string;
+  cess?: string;
+  tdsPaise?: string;
+  tdsSection?: string | null;
+  tdsRate?: string;
+  roundOff?: string;
   total: string;
   status: string;
   notes?: string | null;
   terms?: string | null;
   lineItems?: LineItem[];
+  gstTreatment?: string;
+  placeOfSupply?: string | null;
+  reverseCharge?: boolean;
+  customerGstinSnapshot?: string | null;
+  customerStateCode?: string | null;
+  customerNameSnapshot?: string | null;
+  customerAddressSnapshot?: string | null;
+  amountInWords?: string | null;
+  irn?: string | null;
 }
 
 interface FirmSettings {
@@ -35,7 +55,21 @@ interface FirmSettings {
   gstin?: string | null;
   pan?: string | null;
   address?: string | null;
+  stateCode?: string | null;
   logoUrl?: string | null;
+  signatureUrl?: string | null;
+  signatoryName?: string | null;
+  signatoryDesignation?: string | null;
+}
+
+interface ServiceOption {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  hsnSac?: string | null;
+  defaultBillingAmount?: string | null;
+  defaultGstRate?: string | null;
 }
 
 function formatPaise(paise: string | number) {
@@ -141,38 +175,57 @@ async function generateInvoicePdf(invoice: Invoice, customerName: string, firm: 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(40);
   doc.setFontSize(10);
-  doc.text(customerName, 14, y + 6);
+  doc.text(invoice.customerNameSnapshot || customerName, 14, y + 6);
+  doc.setFontSize(8);
+  doc.setTextColor(90);
+  let billY = y + 11;
+  if (invoice.customerAddressSnapshot) {
+    const lines = doc.splitTextToSize(invoice.customerAddressSnapshot, 90);
+    doc.text(lines, 14, billY);
+    billY += lines.length * 3.5;
+  }
+  if (invoice.customerGstinSnapshot) doc.text(`GSTIN: ${invoice.customerGstinSnapshot}`, 14, billY + 3);
 
-  // Line items table
-  y += 16;
-  const tableData = (invoice.lineItems || []).map((li, i) => [
-    String(i + 1),
-    li.description,
-    li.hsnSac || '-',
-    li.quantity,
-    formatPaiseNum(li.rate),
-    formatPaiseNum(li.amount),
-  ]);
+  // Line items table (with per-line GST split)
+  y = Math.max(y + 16, billY + 8);
+  const isIgst = Number(invoice.igst) > 0;
+  const tableData = (invoice.lineItems || []).map((li, i) => {
+    const cgst = Number(li.cgstAmount || 0);
+    const sgst = Number(li.sgstAmount || 0);
+    const igst = Number(li.igstAmount || 0);
+    return [
+      String(i + 1),
+      li.description,
+      li.hsnSac || '-',
+      li.quantity,
+      formatPaiseNum(li.rate),
+      formatPaiseNum(li.amount),
+      `${li.gstRate || '0'}%`,
+      isIgst ? formatPaiseNum(igst) : `${formatPaiseNum(cgst)} / ${formatPaiseNum(sgst)}`,
+    ];
+  });
 
   autoTable(doc, {
     startY: y,
-    head: [['#', 'Description', 'HSN/SAC', 'Qty', 'Rate (₹)', 'Amount (₹)']],
+    head: [['#', 'Description', 'HSN/SAC', 'Qty', 'Rate (₹)', 'Taxable (₹)', 'GST', isIgst ? 'IGST (₹)' : 'CGST / SGST (₹)']],
     body: tableData,
     theme: 'striped',
     headStyles: {
       fillColor: [44, 62, 80],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 9,
+      fontSize: 8,
     },
-    styles: { fontSize: 9, cellPadding: 4 },
+    styles: { fontSize: 8, cellPadding: 3 },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },
+      0: { cellWidth: 8, halign: 'center' },
       1: { cellWidth: 'auto' },
-      2: { cellWidth: 25, halign: 'center' },
-      3: { cellWidth: 18, halign: 'center' },
-      4: { cellWidth: 28, halign: 'right' },
-      5: { cellWidth: 30, halign: 'right' },
+      2: { cellWidth: 18, halign: 'center' },
+      3: { cellWidth: 12, halign: 'center' },
+      4: { cellWidth: 22, halign: 'right' },
+      5: { cellWidth: 24, halign: 'right' },
+      6: { cellWidth: 12, halign: 'center' },
+      7: { cellWidth: 32, halign: 'right' },
     },
     margin: { left: 14, right: 14 },
   });
@@ -197,13 +250,30 @@ async function generateInvoicePdf(invoice: Invoice, customerName: string, firm: 
   }
   if (Number(invoice.sgst) > 0) {
     y += 6;
-    doc.text('SGST (9%):', totalsX, y);
+    doc.text('SGST:', totalsX, y);
     doc.text(formatPaiseNum(invoice.sgst), valX, y, { align: 'right' });
   }
   if (Number(invoice.igst) > 0) {
     y += 6;
-    doc.text('IGST (18%):', totalsX, y);
+    doc.text('IGST:', totalsX, y);
     doc.text(formatPaiseNum(invoice.igst), valX, y, { align: 'right' });
+  }
+  if (Number(invoice.cess || 0) > 0) {
+    y += 6;
+    doc.text('Cess:', totalsX, y);
+    doc.text(formatPaiseNum(invoice.cess || '0'), valX, y, { align: 'right' });
+  }
+  if (Number(invoice.tdsPaise || 0) > 0) {
+    y += 6;
+    doc.setTextColor(180, 90, 0);
+    doc.text(`(−) TDS${invoice.tdsSection ? ` u/s ${invoice.tdsSection}` : ''}:`, totalsX, y);
+    doc.text(`-${formatPaiseNum(invoice.tdsPaise || '0')}`, valX, y, { align: 'right' });
+    doc.setTextColor(80);
+  }
+  if (Number(invoice.roundOff || 0) !== 0) {
+    y += 6;
+    doc.text('Round Off:', totalsX, y);
+    doc.text(formatPaiseNum(invoice.roundOff || '0'), valX, y, { align: 'right' });
   }
 
   // Total line
@@ -215,8 +285,38 @@ async function generateInvoicePdf(invoice: Invoice, customerName: string, firm: 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(44, 62, 80);
-  doc.text('Total:', totalsX, y);
+  doc.text(Number(invoice.tdsPaise || 0) > 0 ? 'Net Receivable:' : 'Total:', totalsX, y);
   doc.text(`₹ ${formatPaiseNum(invoice.total)}`, valX, y, { align: 'right' });
+
+  // Amount in words
+  if (invoice.amountInWords) {
+    y += 8;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(100);
+    const wordLines = doc.splitTextToSize(`Amount in words: ${invoice.amountInWords}`, pageWidth - 28);
+    doc.text(wordLines, 14, y);
+    y += wordLines.length * 3.5;
+  }
+  if (invoice.reverseCharge) {
+    y += 4;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(180, 90, 0);
+    doc.text('Tax payable under Reverse Charge: YES', 14, y);
+    doc.setTextColor(100);
+  }
+  if (invoice.placeOfSupply) {
+    y += 4;
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text(`Place of Supply: ${invoice.placeOfSupply}`, 14, y);
+  }
+  if (invoice.irn) {
+    y += 4;
+    doc.text(`IRN: ${invoice.irn}`, 14, y);
+  }
 
   // Notes and Terms
   y += 15;
@@ -240,8 +340,42 @@ async function generateInvoicePdf(invoice: Invoice, customerName: string, firm: 
     doc.text(termLines, 14, y + 5);
   }
 
-  // Footer
+  // Authorized Signature block (right side, above footer)
   const pageH = doc.internal.pageSize.getHeight();
+  const sigBlockBottom = pageH - 30;
+  const sigRightX = pageWidth - 14;
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(80);
+  doc.text(`For ${firm?.name || 'TBM Practice OS'}`, sigRightX, sigBlockBottom - 30, { align: 'right' });
+  if (firm?.signatureUrl) {
+    const sigData = await loadImageAsBase64(firm.signatureUrl);
+    if (sigData) {
+      try {
+        // Place signature box: 50mm wide, 18mm tall, right-aligned
+        const sigW = 45;
+        const sigH = 18;
+        doc.addImage(sigData, 'PNG', sigRightX - sigW, sigBlockBottom - 26, sigW, sigH);
+      } catch {
+        // image failed, skip
+      }
+    }
+  }
+  // Signatory name + designation
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(60);
+  doc.setFontSize(8);
+  if (firm?.signatoryName) doc.text(firm.signatoryName, sigRightX, sigBlockBottom - 4, { align: 'right' });
+  if (firm?.signatoryDesignation) doc.text(firm.signatoryDesignation, sigRightX, sigBlockBottom, { align: 'right' });
+  // Underline above "Authorized Signatory"
+  doc.setDrawColor(180);
+  doc.setLineWidth(0.3);
+  doc.line(sigRightX - 60, sigBlockBottom - 7, sigRightX, sigBlockBottom - 7);
+  doc.setFontSize(7);
+  doc.setTextColor(110);
+  doc.text('Authorized Signatory', sigRightX, sigBlockBottom + 4, { align: 'right' });
+
+  // Footer
   doc.setFontSize(7);
   doc.setTextColor(150);
   doc.text('Generated by TBM Practice OS', pageWidth / 2, pageH - 10, { align: 'center' });
@@ -255,7 +389,8 @@ export default function BillingPage() {
   const canPay = hasPermission('payment.create');
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string; gstin?: string | null; address?: string | null; pan?: string | null }[]>([]);
+  const [services, setServices] = useState<ServiceOption[]>([]);
   const [firm, setFirm] = useState<FirmSettings | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
@@ -263,7 +398,9 @@ export default function BillingPage() {
   const [payForm, setPayForm] = useState({ amount: '', mode: 'upi', referenceNo: '' });
   const [form, setForm] = useState({
     customerId: '', issueDate: '', dueDate: '', notes: '', terms: '',
-    lineItems: [{ description: '', quantity: '1', rate: '', amount: '' }],
+    gstTreatment: 'regular', placeOfSupply: '', reverseCharge: false,
+    tdsRate: '', tdsSection: '',
+    lineItems: [{ serviceId: '', description: '', quantity: '1', rate: '', amount: '', hsnSac: '', gstRate: '18' }],
   });
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -272,30 +409,84 @@ export default function BillingPage() {
 
   useEffect(() => {
     load();
-    api<{ id: string; name: string }[]>('/customers').then(setCustomers).catch(() => {});
+    api<{ id: string; name: string; gstin?: string | null; address?: string | null; pan?: string | null }[]>('/customers').then(setCustomers).catch(() => {});
+    api<ServiceOption[]>('/services-catalog').then(setServices).catch(() => {});
     api<FirmSettings>('/settings').then(setFirm).catch(() => {});
   }, []);
 
-  const addLine = () => setForm({ ...form, lineItems: [...form.lineItems, { description: '', quantity: '1', rate: '', amount: '' }] });
+  const addLine = () => setForm({ ...form, lineItems: [...form.lineItems, { serviceId: '', description: '', quantity: '1', rate: '', amount: '', hsnSac: '', gstRate: '18' }] });
 
   const removeLine = (index: number) => {
     if (form.lineItems.length <= 1) return;
     setForm({ ...form, lineItems: form.lineItems.filter((_, i) => i !== index) });
   };
 
+  // `rate` and `amount` in form state are PAISE (matches API).
+  // The rate INPUT shows rupees; we convert on the boundary.
   const updateLine = (index: number, field: string, value: string) => {
     const items = [...form.lineItems];
-    (items[index] as Record<string, string>)[field] = value;
-    if (field === 'rate' || field === 'quantity') {
-      items[index].amount = String(Number(items[index].quantity || 0) * Number(items[index].rate || 0));
+    if (field === 'rateRupees') {
+      // Convert rupees input → paise for storage
+      const rupees = Number(value || 0);
+      const paise = Math.round(rupees * 100);
+      items[index].rate = String(paise);
+      items[index].amount = String(Number(items[index].quantity || 0) * paise);
+    } else {
+      (items[index] as Record<string, string>)[field] = value;
+      if (field === 'quantity') {
+        items[index].amount = String(Number(items[index].quantity || 0) * Number(items[index].rate || 0));
+      }
     }
     setForm({ ...form, lineItems: items });
   };
 
+  const onServiceSelect = (index: number, serviceId: string) => {
+    const items = [...form.lineItems];
+    const svc = services.find((s) => s.id === serviceId);
+    items[index].serviceId = serviceId;
+    if (svc) {
+      // Auto-fill but allow override
+      items[index].description = svc.description?.trim() || svc.name;
+      items[index].hsnSac = svc.hsnSac || items[index].hsnSac || '';
+      if (svc.defaultBillingAmount) {
+        items[index].rate = svc.defaultBillingAmount;
+        items[index].amount = String(Number(items[index].quantity || 1) * Number(svc.defaultBillingAmount));
+      }
+      if (svc.defaultGstRate) items[index].gstRate = String(parseInt(svc.defaultGstRate, 10));
+    }
+    setForm({ ...form, lineItems: items });
+  };
+
+  // Live GST computation matching backend logic
+  const selectedCustomer = customers.find((c) => c.id === form.customerId) as { id: string; name: string; gstin?: string | null; address?: string | null } | undefined;
+  const supplierState = stateCodeFromGstin(firm?.gstin) || firm?.stateCode || null;
+  const customerState = stateCodeFromGstin(selectedCustomer?.gstin);
+  const placeOfSupply = form.placeOfSupply || customerState || supplierState || '';
+  const treatment = form.gstTreatment;
+  const forceIgst = treatment === 'export' || treatment === 'export_with_payment' || treatment === 'sez' || (placeOfSupply !== '' && supplierState !== null && placeOfSupply !== supplierState);
+  const isIntra = !forceIgst && supplierState && placeOfSupply && supplierState === placeOfSupply;
+
   const subtotal = form.lineItems.reduce((s, li) => s + Number(li.amount || 0), 0);
-  const cgst = Math.round(subtotal * 0.09);
-  const sgst = Math.round(subtotal * 0.09);
-  const total = subtotal + cgst + sgst;
+  let cgstSum = 0, sgstSum = 0, igstSum = 0;
+  form.lineItems.forEach((li) => {
+    const amt = Number(li.amount || 0);
+    const rate = treatment === 'composition' || treatment === 'export' ? 0 : Number(li.gstRate || 0);
+    if (rate <= 0) return;
+    const tax = Math.round((amt * rate) / 100);
+    if (isIntra) {
+      const half = Math.round(tax / 2);
+      cgstSum += half;
+      sgstSum += tax - half;
+    } else {
+      igstSum += tax;
+    }
+  });
+  const tdsRateNum = Number(form.tdsRate || 0);
+  const tdsAmount = tdsRateNum > 0 ? Math.round((subtotal * tdsRateNum) / 100) : 0;
+  const beforeRound = subtotal + cgstSum + sgstSum + igstSum - tdsAmount;
+  const totalRounded = Math.round(beforeRound / 100) * 100;
+  const roundOffPaise = totalRounded - beforeRound;
+  const total = totalRounded;
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -307,18 +498,26 @@ export default function BillingPage() {
           customerId: form.customerId,
           issueDate: new Date(form.issueDate).toISOString(),
           dueDate: new Date(form.dueDate).toISOString(),
+          gstTreatment: form.gstTreatment,
+          placeOfSupply: form.placeOfSupply || undefined,
+          reverseCharge: form.reverseCharge,
+          tdsRate: form.tdsRate || undefined,
+          tdsSection: form.tdsSection || undefined,
           notes: form.notes || undefined,
           terms: form.terms || undefined,
           lineItems: form.lineItems.map((li) => ({
+            serviceId: (li as { serviceId?: string }).serviceId || undefined,
             description: li.description,
             quantity: li.quantity,
             rate: li.rate,
             amount: li.amount,
+            hsnSac: li.hsnSac || undefined,
+            gstRate: li.gstRate || '18',
           })),
         }),
       });
       setShowForm(false);
-      setForm({ customerId: '', issueDate: '', dueDate: '', notes: '', terms: '', lineItems: [{ description: '', quantity: '1', rate: '', amount: '' }] });
+      setForm({ customerId: '', issueDate: '', dueDate: '', notes: '', terms: '', gstTreatment: 'regular', placeOfSupply: '', reverseCharge: false, tdsRate: '', tdsSection: '', lineItems: [{ serviceId: '', description: '', quantity: '1', rate: '', amount: '', hsnSac: '', gstRate: '18' }] });
       load();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed');
@@ -377,79 +576,205 @@ export default function BillingPage() {
       </div>
 
       {showForm && (
-        <form onSubmit={handleCreate} className="panel space-y-4">
+        <form onSubmit={handleCreate} className="panel space-y-5">
           <div className="panel-title">New Invoice</div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
+
+          {/* Bill-to */}
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Customer *</label>
+              <label className="field-label">Customer *</label>
               <select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required>
                 <option value="">Select...</option>
                 {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              {selectedCustomer && (
+                <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                  {selectedCustomer.gstin && <div>GSTIN: <span className="font-medium text-foreground">{selectedCustomer.gstin}</span> {customerState && `(${STATE_NAME[customerState] || customerState})`}</div>}
+                  {selectedCustomer.address && <div className="truncate">{selectedCustomer.address}</div>}
+                </div>
+              )}
             </div>
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Issue Date *</label>
+              <label className="field-label">Issue Date *</label>
               <input type="date" className="input-field" value={form.issueDate} onChange={(e) => setForm({ ...form, issueDate: e.target.value })} required />
             </div>
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Due Date *</label>
+              <label className="field-label">Due Date *</label>
               <input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} required />
             </div>
           </div>
 
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Line Items</div>
-          {form.lineItems.map((li, i) => (
-            <div key={i} className="grid gap-2 sm:grid-cols-5 items-end">
-              <div className="sm:col-span-2">
-                <label className="mb-1 block text-xs text-muted-foreground">Description</label>
-                <input className="input-field" placeholder="Service description" value={li.description} onChange={(e) => updateLine(i, 'description', e.target.value)} required />
+          {/* GST settings */}
+          <div className="rounded-lg border border-border bg-accent/20 p-3">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">GST Settings</div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <div>
+                <label className="field-label">GST Treatment</label>
+                <select className="input-field" value={form.gstTreatment} onChange={(e) => setForm({ ...form, gstTreatment: e.target.value })}>
+                  <option value="regular">Regular (taxable)</option>
+                  <option value="composition">Composition (no GST charged)</option>
+                  <option value="unregistered">Unregistered customer</option>
+                  <option value="sez">SEZ supply</option>
+                  <option value="export">Export (without payment of tax / LUT)</option>
+                  <option value="export_with_payment">Export (with payment of IGST)</option>
+                </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Qty</label>
-                <input className="input-field" type="number" min="1" value={li.quantity} onChange={(e) => updateLine(i, 'quantity', e.target.value)} />
+                <label className="field-label">Place of Supply</label>
+                <select className="input-field" value={form.placeOfSupply} onChange={(e) => setForm({ ...form, placeOfSupply: e.target.value })}>
+                  <option value="">{customerState ? `Auto: ${STATE_NAME[customerState] || customerState}` : 'Select...'}</option>
+                  {INDIA_STATES.map((s) => <option key={s.code} value={s.code}>{s.code} — {s.name}</option>)}
+                </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Rate (paise)</label>
-                <input className="input-field" type="number" placeholder="e.g. 500000" value={li.rate} onChange={(e) => updateLine(i, 'rate', e.target.value)} required />
-              </div>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <label className="mb-1 block text-xs text-muted-foreground">Amount</label>
-                  <input className="input-field bg-accent/50" value={li.amount ? formatPaise(li.amount) : ''} readOnly />
+                <label className="field-label">Tax Type (auto)</label>
+                <div className="input-field flex items-center bg-background text-sm">
+                  {!supplierState ? <span className="text-amber-700 dark:text-amber-400">Set firm state in Settings →</span> : placeOfSupply === '' ? '—' : isIntra ? 'CGST + SGST (intra-state)' : 'IGST (inter-state)'}
                 </div>
-                {form.lineItems.length > 1 && (
-                  <button type="button" className="mb-[2px] rounded p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => removeLine(i)}>
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                  </button>
+                {supplierState && (
+                  <p className="mt-0.5 text-[10.5px] text-muted-foreground">Supplier: {STATE_NAME[supplierState] || supplierState} ({supplierState})</p>
                 )}
               </div>
+              <div className="flex items-end">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-medium">
+                  <input type="checkbox" className="h-4 w-4" checked={form.reverseCharge} onChange={(e) => setForm({ ...form, reverseCharge: e.target.checked })} />
+                  Reverse charge applicable
+                </label>
+              </div>
             </div>
-          ))}
-          <button type="button" className="text-xs text-primary hover:underline" onClick={addLine}>+ Add line item</button>
+            {!supplierState && (
+              <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">⚠ Firm state not set. Go to Settings → Business Details → Business State to enable correct CGST/SGST vs IGST split.</p>
+            )}
+          </div>
+
+          {/* Line items */}
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Line Items</div>
+              <button type="button" className="text-xs font-medium text-primary hover:underline" onClick={addLine}>+ Add line item</button>
+            </div>
+            <div className="space-y-2">
+              {form.lineItems.map((li, i) => {
+                const lineTax = (() => {
+                  const amt = Number(li.amount || 0);
+                  const rate = treatment === 'composition' || treatment === 'export' ? 0 : Number(li.gstRate || 0);
+                  return Math.round((amt * rate) / 100);
+                })();
+                return (
+                  <div key={i} className="rounded-lg border border-border bg-panel p-3">
+                    <div className="grid gap-2 sm:grid-cols-12 items-end">
+                      <div className="sm:col-span-3">
+                        <label className="field-label">Service</label>
+                        <select className="input-field" value={(li as { serviceId?: string }).serviceId || ''} onChange={(e) => onServiceSelect(i, e.target.value)}>
+                          <option value="">— Custom (no service) —</option>
+                          {services.map((s) => <option key={s.id} value={s.id}>{s.code} — {s.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-4">
+                        <label className="field-label">Description *</label>
+                        <input className="input-field" placeholder="Auto-filled from service; editable" value={li.description} onChange={(e) => updateLine(i, 'description', e.target.value)} required />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <label className="field-label">HSN/SAC</label>
+                        <input className="input-field" placeholder="998231" value={li.hsnSac || ''} onChange={(e) => updateLine(i, 'hsnSac', e.target.value)} />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <label className="field-label">Qty</label>
+                        <input className="input-field" type="number" min="0" step="0.01" value={li.quantity} onChange={(e) => updateLine(i, 'quantity', e.target.value)} />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <label className="field-label">Rate (₹)</label>
+                        <input
+                          className="input-field"
+                          type="number"
+                          step="0.01"
+                          placeholder="5000.00"
+                          value={li.rate ? (Number(li.rate) / 100).toString() : ''}
+                          onChange={(e) => updateLine(i, 'rateRupees', e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="sm:col-span-1">
+                        <label className="field-label">GST %</label>
+                        <select className="input-field" value={li.gstRate} onChange={(e) => updateLine(i, 'gstRate', e.target.value)} disabled={treatment === 'composition' || treatment === 'export'}>
+                          {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
+                        </select>
+                      </div>
+                      <div className="sm:col-span-1 flex items-end gap-1">
+                        <div className="flex-1">
+                          <label className="field-label">Amount</label>
+                          <input className="input-field bg-accent/30" value={li.amount ? formatPaise(li.amount) : ''} readOnly />
+                        </div>
+                        {form.lineItems.length > 1 && (
+                          <button type="button" className="mb-[2px] rounded p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => removeLine(i)} aria-label="Remove line">
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {Number(li.amount) > 0 && lineTax > 0 && (
+                      <div className="mt-1.5 text-[10.5px] text-muted-foreground">Tax on this line: <span className="font-semibold text-foreground">{formatPaise(lineTax)}</span></div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* TDS */}
+          <div className="rounded-lg border border-border bg-accent/20 p-3">
+            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">TDS (Customer-deducted)</div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <label className="field-label">Section</label>
+                <select className="input-field" value={form.tdsSection} onChange={(e) => setForm({ ...form, tdsSection: e.target.value })}>
+                  <option value="">None</option>
+                  {TDS_SECTIONS.map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Rate %</label>
+                <input className="input-field" type="number" step="0.01" placeholder="e.g. 10" value={form.tdsRate} onChange={(e) => setForm({ ...form, tdsRate: e.target.value })} />
+              </div>
+              <div>
+                <label className="field-label">TDS Amount (auto)</label>
+                <div className="input-field flex items-center bg-background text-sm">{tdsAmount > 0 ? formatPaise(tdsAmount) : '—'}</div>
+              </div>
+            </div>
+          </div>
 
           {/* Totals preview */}
           {subtotal > 0 && (
-            <div className="rounded-md bg-accent/30 p-3 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatPaise(subtotal)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">CGST (9%)</span><span>{formatPaise(cgst)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">SGST (9%)</span><span>{formatPaise(sgst)}</span></div>
-              <div className="mt-1 flex justify-between border-t border-border pt-1 font-semibold"><span>Total</span><span>{formatPaise(total)}</span></div>
+            <div className="rounded-lg border border-border bg-card p-4">
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Subtotal (taxable value)</span><span className="font-mono tabular-nums">{formatPaise(subtotal)}</span></div>
+                {cgstSum > 0 && <div className="flex justify-between"><span className="text-muted-foreground">CGST</span><span className="font-mono tabular-nums">{formatPaise(cgstSum)}</span></div>}
+                {sgstSum > 0 && <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span className="font-mono tabular-nums">{formatPaise(sgstSum)}</span></div>}
+                {igstSum > 0 && <div className="flex justify-between"><span className="text-muted-foreground">IGST</span><span className="font-mono tabular-nums">{formatPaise(igstSum)}</span></div>}
+                {tdsAmount > 0 && <div className="flex justify-between text-amber-700 dark:text-amber-400"><span>(−) TDS {form.tdsSection ? `u/s ${form.tdsSection}` : ''} @ {form.tdsRate}%</span><span className="font-mono tabular-nums">−{formatPaise(tdsAmount)}</span></div>}
+                {roundOffPaise !== 0 && <div className="flex justify-between text-muted-foreground"><span>Round Off</span><span className="font-mono tabular-nums">{roundOffPaise > 0 ? '+' : ''}{formatPaise(roundOffPaise)}</span></div>}
+                <div className="mt-2 flex justify-between border-t border-border pt-2 text-base font-bold text-foreground"><span>Net Receivable</span><span className="font-mono tabular-nums">{formatPaise(total)}</span></div>
+                <p className="mt-1 text-[11px] italic text-muted-foreground">{rupeesToWordsIN(total / 100)}</p>
+              </div>
             </div>
           )}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Notes</label>
-              <textarea className="input-field" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional notes" />
+              <label className="field-label">Notes</label>
+              <textarea className="input-field" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional notes (e.g. service period, PO ref)" />
             </div>
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Terms & Conditions</label>
-              <textarea className="input-field" rows={2} value={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.value })} placeholder="Payment terms" />
+              <label className="field-label">Terms & Conditions</label>
+              <textarea className="input-field" rows={2} value={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.value })} placeholder="Payment terms (e.g. Net 30, late fee)" />
             </div>
           </div>
 
-          <button type="submit" className="primary-button">Create Invoice</button>
+          <div className="flex justify-end gap-2 border-t border-border pt-3">
+            <button type="button" className="secondary-button" onClick={() => setShowForm(false)}>Cancel</button>
+            <button type="submit" className="primary-button">Create Invoice</button>
+          </div>
         </form>
       )}
 
@@ -512,29 +837,38 @@ export default function BillingPage() {
 
       {/* Payment Modal */}
       {payingId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setPayingId(null)}>
-          <div className="w-full max-w-md panel space-y-3" onClick={(e) => e.stopPropagation()}>
-            <div className="panel-title">Record Payment</div>
-            <div className="space-y-3">
+        <div className="modal-overlay" onClick={() => setPayingId(null)} role="dialog" aria-modal="true" aria-labelledby="pay-modal-title">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
               <div>
-                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Amount (paise)</label>
+                <span className="modal-eyebrow">Billing</span>
+                <h3 id="pay-modal-title" className="modal-title">Record Payment</h3>
+                <p className="modal-subtitle">Add a payment against this invoice.</p>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setPayingId(null)} aria-label="Close">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="modal-body space-y-3">
+              <div>
+                <label className="field-label">Amount (paise)</label>
                 <input className="input-field" value={payForm.amount} onChange={(e) => setPayForm({ ...payForm, amount: e.target.value })} />
-                <p className="mt-0.5 text-xs text-muted-foreground">{payForm.amount ? formatPaise(payForm.amount) : ''}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{payForm.amount ? formatPaise(payForm.amount) : ''}</p>
               </div>
               <div>
-                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Mode</label>
+                <label className="field-label">Mode</label>
                 <select className="input-field" value={payForm.mode} onChange={(e) => setPayForm({ ...payForm, mode: e.target.value })}>
                   {['cash', 'upi', 'neft', 'cheque', 'other'].map((m) => <option key={m} value={m}>{m.toUpperCase()}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Reference No</label>
+                <label className="field-label">Reference No</label>
                 <input className="input-field" value={payForm.referenceNo} onChange={(e) => setPayForm({ ...payForm, referenceNo: e.target.value })} placeholder="Transaction ID" />
               </div>
             </div>
-            <div className="flex gap-2">
-              <button className="primary-button" onClick={handlePay}>Submit Payment</button>
-              <button className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent" onClick={() => setPayingId(null)}>Cancel</button>
+            <div className="modal-footer">
+              <button type="button" className="secondary-button" onClick={() => setPayingId(null)}>Cancel</button>
+              <button type="button" className="primary-button" onClick={handlePay}>Submit Payment</button>
             </div>
           </div>
         </div>
@@ -542,90 +876,91 @@ export default function BillingPage() {
 
       {/* Invoice Preview Modal */}
       {viewingInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setViewingInvoice(null)}>
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto panel" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">Invoice {viewingInvoice.invoiceNo}</h3>
-                <span className={`mt-1 inline-block rounded px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[viewingInvoice.status] || 'bg-accent'}`}>
+        <div className="modal-overlay" onClick={() => setViewingInvoice(null)} role="dialog" aria-modal="true" aria-labelledby="invoice-modal-title">
+          <div className="modal-card modal-lg" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="min-w-0">
+                <span className="modal-eyebrow">Invoice</span>
+                <h3 id="invoice-modal-title" className="modal-title">{viewingInvoice.invoiceNo}</h3>
+                <span className={`mt-1 inline-block rounded px-2 py-0.5 text-[11px] font-semibold capitalize ${STATUS_COLORS[viewingInvoice.status] || 'bg-accent text-foreground'}`}>
                   {viewingInvoice.status.replace(/_/g, ' ')}
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  type="button"
                   className="primary-button text-xs"
-                  onClick={() => {
-                    handleDownloadPdf(viewingInvoice.id);
-                  }}
+                  onClick={() => { handleDownloadPdf(viewingInvoice.id); }}
                 >
                   Download PDF
                 </button>
-                <button onClick={() => setViewingInvoice(null)} className="rounded p-1 text-muted-foreground hover:bg-accent">
-                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                <button type="button" onClick={() => setViewingInvoice(null)} className="modal-close" aria-label="Close">
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
                 </button>
               </div>
             </div>
+            <div className="modal-body">
+              <dl className="mb-4 grid grid-cols-2 gap-x-4 gap-y-3">
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Customer</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-foreground">{customerMap[viewingInvoice.customerId] || '-'}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Issue Date</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-foreground">{new Date(viewingInvoice.issueDate).toLocaleDateString('en-IN')}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Due Date</dt>
+                  <dd className="mt-0.5 text-sm font-semibold text-foreground">{new Date(viewingInvoice.dueDate).toLocaleDateString('en-IN')}</dd>
+                </div>
+              </dl>
 
-            <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-[13px] font-medium text-muted-foreground">Customer</span>
-                <p>{customerMap[viewingInvoice.customerId] || '-'}</p>
-              </div>
-              <div>
-                <span className="text-[13px] font-medium text-muted-foreground">Issue Date</span>
-                <p>{new Date(viewingInvoice.issueDate).toLocaleDateString('en-IN')}</p>
-              </div>
-              <div>
-                <span className="text-[13px] font-medium text-muted-foreground">Due Date</span>
-                <p>{new Date(viewingInvoice.dueDate).toLocaleDateString('en-IN')}</p>
-              </div>
-            </div>
-
-            {/* Line items */}
-            <table className="mb-4 w-full text-sm">
-              <thead className="border-b border-border text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="py-2 text-left">#</th>
-                  <th className="text-left">Description</th>
-                  <th className="text-right">Qty</th>
-                  <th className="text-right">Rate</th>
-                  <th className="text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {(viewingInvoice.lineItems || []).map((li, i) => (
-                  <tr key={li.id}>
-                    <td className="py-2">{i + 1}</td>
-                    <td>{li.description}</td>
-                    <td className="text-right">{li.quantity}</td>
-                    <td className="text-right">{formatPaise(li.rate)}</td>
-                    <td className="text-right">{formatPaise(li.amount)}</td>
+              {/* Line items */}
+              <table className="mb-4 w-full text-sm">
+                <thead className="border-b border-border text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="py-2 text-left">#</th>
+                    <th className="text-left">Description</th>
+                    <th className="text-right">Qty</th>
+                    <th className="text-right">Rate</th>
+                    <th className="text-right">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {(viewingInvoice.lineItems || []).map((li, i) => (
+                    <tr key={li.id}>
+                      <td className="py-2">{i + 1}</td>
+                      <td>{li.description}</td>
+                      <td className="text-right">{li.quantity}</td>
+                      <td className="text-right">{formatPaise(li.rate)}</td>
+                      <td className="text-right font-semibold">{formatPaise(li.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-            {/* Totals */}
-            <div className="ml-auto w-64 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{formatPaise(viewingInvoice.subtotal)}</span></div>
-              {Number(viewingInvoice.cgst) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">CGST (9%)</span><span>{formatPaise(viewingInvoice.cgst)}</span></div>}
-              {Number(viewingInvoice.sgst) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">SGST (9%)</span><span>{formatPaise(viewingInvoice.sgst)}</span></div>}
-              {Number(viewingInvoice.igst) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">IGST (18%)</span><span>{formatPaise(viewingInvoice.igst)}</span></div>}
-              <div className="flex justify-between border-t border-border pt-1 font-semibold"><span>Total</span><span>{formatPaise(viewingInvoice.total)}</span></div>
+              {/* Totals */}
+              <div className="ml-auto w-64 space-y-1 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="font-medium text-foreground">{formatPaise(viewingInvoice.subtotal)}</span></div>
+                {Number(viewingInvoice.cgst) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">CGST (9%)</span><span className="font-medium text-foreground">{formatPaise(viewingInvoice.cgst)}</span></div>}
+                {Number(viewingInvoice.sgst) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">SGST (9%)</span><span className="font-medium text-foreground">{formatPaise(viewingInvoice.sgst)}</span></div>}
+                {Number(viewingInvoice.igst) > 0 && <div className="flex justify-between"><span className="text-muted-foreground">IGST (18%)</span><span className="font-medium text-foreground">{formatPaise(viewingInvoice.igst)}</span></div>}
+                <div className="flex justify-between border-t border-border pt-1.5 text-base font-bold text-foreground"><span>Total</span><span>{formatPaise(viewingInvoice.total)}</span></div>
+              </div>
+
+              {viewingInvoice.notes && (
+                <div className="mt-4 text-sm">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Notes</span>
+                  <p className="mt-0.5 text-foreground">{viewingInvoice.notes}</p>
+                </div>
+              )}
+              {viewingInvoice.terms && (
+                <div className="mt-3 text-sm">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Terms</span>
+                  <p className="mt-0.5 text-foreground">{viewingInvoice.terms}</p>
+                </div>
+              )}
             </div>
-
-            {viewingInvoice.notes && (
-              <div className="mt-4 text-sm">
-                <span className="text-[13px] font-medium text-muted-foreground">Notes</span>
-                <p className="mt-0.5 text-muted-foreground">{viewingInvoice.notes}</p>
-              </div>
-            )}
-            {viewingInvoice.terms && (
-              <div className="mt-2 text-sm">
-                <span className="text-[13px] font-medium text-muted-foreground">Terms</span>
-                <p className="mt-0.5 text-muted-foreground">{viewingInvoice.terms}</p>
-              </div>
-            )}
           </div>
         </div>
       )}

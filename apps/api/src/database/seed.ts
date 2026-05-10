@@ -55,6 +55,7 @@ const permissionSeeds = [
   ['notification.create', 'Create notifications', 'notifications'],
   ['audit.view', 'View audit logs', 'audit'],
   ['scheduler.view', 'View scheduler status', 'scheduler'],
+  ['report.view', 'View reports', 'reports'],
 ] as const;
 
 async function seed() {

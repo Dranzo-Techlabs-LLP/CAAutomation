@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -267,35 +268,45 @@ export default function UsersPage() {
       )}
       {/* Reset Password Modal */}
       {resetTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setResetTarget(null)}>
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-1 text-lg font-semibold">Reset Password</h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Set new password for <span className="font-medium text-foreground">{resetTarget.email}</span>
-            </p>
-            {resetSuccess && (
-              <div className="mb-3 rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
-                {resetSuccess}
+        <div className="modal-overlay" onClick={() => setResetTarget(null)} role="dialog" aria-modal="true" aria-labelledby="reset-pw-title">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="min-w-0">
+                <span className="modal-eyebrow">Admin Action</span>
+                <h3 id="reset-pw-title" className="modal-title">Reset Password</h3>
+                <p className="modal-subtitle truncate">For <span className="font-semibold text-foreground">{resetTarget.email}</span></p>
               </div>
-            )}
-            {resetError && (
-              <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
-                {resetError}
-              </div>
-            )}
+              <button type="button" className="modal-close" onClick={() => setResetTarget(null)} aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             <form onSubmit={handleResetPassword}>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">New Password</label>
-              <input
-                type="password"
-                className="input-field mb-4"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={8}
-                required
-                placeholder="Min 8 characters"
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
+              <div className="modal-body space-y-3">
+                {resetSuccess && (
+                  <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+                    {resetSuccess}
+                  </div>
+                )}
+                {resetError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                    {resetError}
+                  </div>
+                )}
+                <div>
+                  <label className="field-label">New Password</label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    minLength={8}
+                    required
+                    placeholder="Min 8 characters"
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
                 <button type="button" className="secondary-button" onClick={() => setResetTarget(null)}>Cancel</button>
                 <button type="submit" className="primary-button">Reset Password</button>
               </div>

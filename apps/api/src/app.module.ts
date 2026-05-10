@@ -16,6 +16,7 @@ import { BillingModule } from './billing/billing.module';
 import { InvoiceLineItem } from './billing/invoice-line-item.entity';
 import { Invoice } from './billing/invoice.entity';
 import { Payment } from './billing/payment.entity';
+import { PaymentAdvice } from './billing/payment-advice.entity';
 import { Firm } from './common/entities/firm.entity';
 import { validateEnv } from './config/env.validation';
 import { Customer } from './customers/customer.entity';
@@ -50,6 +51,7 @@ import { Team } from './teams/team.entity';
 import { TeamsModule } from './teams/teams.module';
 import { TimeLog } from './time-logs/time-log.entity';
 import { TimeLogsModule } from './time-logs/time-logs.module';
+import { ReportsModule } from './reports/reports.module';
 import { User } from './users/user.entity';
 import { UsersModule } from './users/users.module';
 import { TaskStepHistory } from './workflows/task-step-history.entity';
@@ -100,6 +102,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
           Invoice,
           InvoiceLineItem,
           Payment,
+          PaymentAdvice,
           ApiKey,
           Webhook,
           Notification,
@@ -150,6 +153,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     AuditModule,
     AutomationRulesModule,
     SettingsModule,
+    ReportsModule,
   ],
 })
 export class AppModule {}

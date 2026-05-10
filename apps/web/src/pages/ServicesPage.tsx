@@ -7,12 +7,16 @@ interface Service {
   id: string;
   code: string;
   name: string;
+  description?: string | null;
+  hsnSac?: string | null;
+  defaultGstRate?: string | null;
   defaultBillingAmount?: string;
   recurrenceDefault: string;
   defaultAssigneeStrategy?: string;
 }
 
 const RECURRENCES = ['none', 'weekly', 'monthly', 'quarterly', 'yearly', 'custom'];
+const GST_RATES = ['0', '5', '12', '18', '28'];
 
 export default function ServicesPage() {
   const { hasPermission } = useAuth();
@@ -20,7 +24,7 @@ export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
-  const [form, setForm] = useState({ code: '', name: '', defaultBillingAmount: '', recurrenceDefault: 'none' });
+  const [form, setForm] = useState({ code: '', name: '', description: '', hsnSac: '', defaultGstRate: '18', defaultBillingAmount: '', recurrenceDefault: 'none' });
   const [error, setError] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -28,7 +32,7 @@ export default function ServicesPage() {
   useEffect(() => { load(); }, []);
 
   const resetForm = () => {
-    setForm({ code: '', name: '', defaultBillingAmount: '', recurrenceDefault: 'none' });
+    setForm({ code: '', name: '', description: '', hsnSac: '', defaultGstRate: '18', defaultBillingAmount: '', recurrenceDefault: 'none' });
     setShowForm(false);
     setEditingService(null);
     setError('');
@@ -51,6 +55,9 @@ export default function ServicesPage() {
     setForm({
       code: s.code,
       name: s.name,
+      description: s.description || '',
+      hsnSac: s.hsnSac || '',
+      defaultGstRate: s.defaultGstRate || '18',
       defaultBillingAmount: s.defaultBillingAmount || '',
       recurrenceDefault: s.recurrenceDefault,
     });
@@ -94,30 +101,60 @@ export default function ServicesPage() {
       </div>
 
       {(showForm || editingService) && (
-        <form onSubmit={editingService ? handleUpdate : handleCreate} className="panel space-y-3">
+        <form onSubmit={editingService ? handleUpdate : handleCreate} className="panel space-y-4">
           <div className="panel-title">{editingService ? 'Edit Service' : 'New Service'}</div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{error}</div>}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Code</label>
-              <input className="input-field" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required />
+              <label className="field-label">Code *</label>
+              <input className="input-field" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} required placeholder="GST-RET" />
             </div>
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Name</label>
-              <input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <label className="field-label">Name *</label>
+              <input className="input-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder="GST Returns Filing" />
             </div>
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Default Billing (paise)</label>
-              <input className="input-field" value={form.defaultBillingAmount} onChange={(e) => setForm({ ...form, defaultBillingAmount: e.target.value })} />
+              <label className="field-label">HSN / SAC</label>
+              <input className="input-field" value={form.hsnSac} onChange={(e) => setForm({ ...form, hsnSac: e.target.value })} placeholder="998231" maxLength={20} />
+              <p className="mt-0.5 text-[10.5px] text-muted-foreground">SAC for services / HSN for goods. Auto-fills on invoice.</p>
             </div>
             <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Recurrence</label>
+              <label className="field-label">Default GST %</label>
+              <select className="input-field" value={form.defaultGstRate} onChange={(e) => setForm({ ...form, defaultGstRate: e.target.value })}>
+                {GST_RATES.map((r) => <option key={r} value={r}>{r}%</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="field-label">Default Billing (₹)</label>
+              <input
+                className="input-field"
+                type="number"
+                step="0.01"
+                value={form.defaultBillingAmount ? (Number(form.defaultBillingAmount) / 100).toString() : ''}
+                onChange={(e) => {
+                  const rupees = Number(e.target.value || 0);
+                  setForm({ ...form, defaultBillingAmount: String(Math.round(rupees * 100)) });
+                }}
+                placeholder="5000.00"
+              />
+              {form.defaultBillingAmount && Number(form.defaultBillingAmount) > 0 && <p className="mt-0.5 text-[10.5px] text-muted-foreground">Stored as {form.defaultBillingAmount} paise</p>}
+            </div>
+            <div>
+              <label className="field-label">Recurrence</label>
               <select className="input-field" value={form.recurrenceDefault} onChange={(e) => setForm({ ...form, recurrenceDefault: e.target.value })}>
                 {RECURRENCES.map((v) => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
+            <div className="sm:col-span-2 lg:col-span-4">
+              <label className="field-label">Description</label>
+              <textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="e.g. Monthly GSTR-1 / GSTR-3B preparation and filing for the period" />
+              <p className="mt-0.5 text-[10.5px] text-muted-foreground">Used as default invoice line description; can be edited per invoice.</p>
+            </div>
           </div>
-          <button type="submit" className="primary-button">{editingService ? 'Save Changes' : 'Create'}</button>
+          <div className="flex justify-end gap-2 border-t border-border pt-3">
+            <button type="button" className="secondary-button" onClick={resetForm}>Cancel</button>
+            <button type="submit" className="primary-button">{editingService ? 'Save Changes' : 'Create Service'}</button>
+          </div>
         </form>
       )}
 
@@ -127,6 +164,8 @@ export default function ServicesPage() {
             <tr>
               <th className="py-2">Code</th>
               <th>Name</th>
+              <th>HSN/SAC</th>
+              <th>GST %</th>
               <th>Recurrence</th>
               <th>Default Billing</th>
               <th>Strategy</th>
@@ -137,7 +176,12 @@ export default function ServicesPage() {
             {services.map((s) => (
               <tr key={s.id}>
                 <td className="py-3 font-mono text-xs font-medium">{s.code}</td>
-                <td>{s.name}</td>
+                <td>
+                  <div className="text-sm font-medium">{s.name}</div>
+                  {s.description && <div className="truncate text-[11px] text-muted-foreground max-w-[280px]" title={s.description}>{s.description}</div>}
+                </td>
+                <td className="font-mono text-xs">{s.hsnSac || '-'}</td>
+                <td className="text-xs">{s.defaultGstRate ? `${s.defaultGstRate}%` : '-'}</td>
                 <td className="text-xs">{s.recurrenceDefault}</td>
                 <td className="text-xs">{s.defaultBillingAmount ? `₹${(Number(s.defaultBillingAmount) / 100).toLocaleString('en-IN')}` : '-'}</td>
                 <td className="text-xs">{s.defaultAssigneeStrategy?.replace(/_/g, ' ') || '-'}</td>
@@ -161,7 +205,7 @@ export default function ServicesPage() {
               </tr>
             ))}
             {services.length === 0 && (
-              <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No services found</td></tr>
+              <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No services found</td></tr>
             )}
           </tbody>
         </table>

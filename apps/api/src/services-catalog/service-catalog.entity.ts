@@ -36,4 +36,10 @@ export class ServiceCatalog extends TenantAuditColumns {
 
   @Column({ name: 'recurrence_default', type: 'enum', enum: RecurrenceDefault, default: RecurrenceDefault.None })
   recurrenceDefault!: RecurrenceDefault;
+
+  @Column({ name: 'hsn_sac', type: 'varchar', length: 20, nullable: true })
+  hsnSac?: string | null;
+
+  @Column({ name: 'default_gst_rate', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  defaultGstRate?: string | null;
 }

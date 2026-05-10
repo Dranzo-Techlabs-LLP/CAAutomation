@@ -560,6 +560,31 @@ function TaskDetailPanel({
                     <div><span className="text-[13px] font-medium text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap rounded-md bg-accent/20 p-2">{task.description}</p></div>
                   )}
 
+                  {/* Resolution */}
+                  <div className="rounded-md border border-border p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Resolution</span>
+                      {canEdit && !editingResolution && (
+                        <button className="text-xs text-primary hover:underline" onClick={() => setEditingResolution(true)}>
+                          {task.resolution ? 'Edit' : 'Add Resolution'}
+                        </button>
+                      )}
+                    </div>
+                    {editingResolution ? (
+                      <div className="mt-2 space-y-2">
+                        <textarea className="input-field" rows={3} value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="Describe the resolution..." />
+                        <div className="flex gap-2">
+                          <button className="primary-button text-xs" onClick={saveResolution}>Save</button>
+                          <button className="text-xs text-muted-foreground hover:underline" onClick={() => { setEditingResolution(false); setResolution(task.resolution || ''); }}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : task.resolution ? (
+                      <p className="mt-2 text-sm whitespace-pre-wrap">{task.resolution}</p>
+                    ) : (
+                      <p className="mt-2 text-xs text-muted-foreground italic">No resolution yet</p>
+                    )}
+                  </div>
+
                   {/* Status (view-only when not editing) */}
                   {canEdit && (
                     <div>
@@ -627,31 +652,6 @@ function TaskDetailPanel({
                   </div>
                 </>
               )}
-
-              {/* Resolution */}
-              <div className="rounded-md border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Resolution</span>
-                  {canEdit && !editingResolution && (
-                    <button className="text-xs text-primary hover:underline" onClick={() => setEditingResolution(true)}>
-                      {task.resolution ? 'Edit' : 'Add Resolution'}
-                    </button>
-                  )}
-                </div>
-                {editingResolution ? (
-                  <div className="mt-2 space-y-2">
-                    <textarea className="input-field" rows={3} value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="Describe the resolution..." />
-                    <div className="flex gap-2">
-                      <button className="primary-button text-xs" onClick={saveResolution}>Save</button>
-                      <button className="text-xs text-muted-foreground hover:underline" onClick={() => { setEditingResolution(false); setResolution(task.resolution || ''); }}>Cancel</button>
-                    </div>
-                  </div>
-                ) : task.resolution ? (
-                  <p className="mt-2 text-sm whitespace-pre-wrap">{task.resolution}</p>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground italic">No resolution yet</p>
-                )}
-              </div>
             </div>
           )}
 

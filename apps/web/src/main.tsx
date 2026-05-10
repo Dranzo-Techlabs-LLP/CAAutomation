@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   BarChart3, Bell, BookOpen, CalendarDays, ClipboardList,
-  FileText, Inbox, KeyRound, LogOut, Menu, Moon, Repeat, Settings, Shield, ShieldCheck, Sun, Users, UsersRound, Workflow, X,
+  FileText, Inbox, KeyRound, LineChart, LogOut, Menu, Moon, Receipt, Repeat, Settings, Shield, ShieldCheck, Sun, Users, UsersRound, Workflow, X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { api } from './lib/api';
@@ -24,6 +24,8 @@ import UsersPage from './pages/UsersPage';
 import ServicesPage from './pages/ServicesPage';
 import ComplianceCalendarPage from './pages/ComplianceCalendarPage';
 import WorkflowsPage from './pages/WorkflowsPage';
+import ReportsPage from './pages/ReportsPage';
+import PaymentAdvicesPage from './pages/PaymentAdvicesPage';
 import SettingsPage from './pages/SettingsPage';
 import './styles.css';
 
@@ -46,8 +48,10 @@ const NAV: NavEntry[] = [
   { path: '/recurrences', label: 'Recurrences', icon: <Repeat />, permission: 'recurrence.view', section: 'manage' },
   { path: '/teams', label: 'Teams', icon: <UsersRound />, permission: 'team.view', section: 'manage' },
   { path: '/services', label: 'Services', icon: <BookOpen />, permission: 'service.view', section: 'manage' },
-  { path: '/billing', label: 'Billing', icon: <FileText />, permission: 'billing.view', section: 'manage' },
+  { path: '/billing', label: 'Invoices', icon: <FileText />, permission: 'billing.view', section: 'manage' },
+  { path: '/payment-advices', label: 'Payment Advices', icon: <Receipt />, permission: 'billing.view', section: 'manage' },
   { path: '/workflows', label: 'Workflows', icon: <Workflow />, permission: 'workflow.view', section: 'manage' },
+  { path: '/reports', label: 'Reports', icon: <LineChart />, permission: 'report.view', section: 'manage' },
   { path: '/notifications', label: 'Notifications', icon: <Bell />, section: 'system' },
   { path: '/audit', label: 'Audit Logs', icon: <Shield />, permission: 'audit.view', section: 'system' },
   { path: '/settings', label: 'Settings', icon: <Settings />, permission: 'settings.edit', section: 'system' },
@@ -225,8 +229,10 @@ function AppShell() {
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="/billing" element={<BillingPage />} />
+          <Route path="/payment-advices" element={<PaymentAdvicesPage />} />
           <Route path="/compliance" element={<ComplianceCalendarPage />} />
           <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route path="/reports" element={<ReportsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />
@@ -237,56 +243,66 @@ function AppShell() {
 
       {/* Change Password Modal */}
       {showChangePw && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowChangePw(false)}>
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-1 text-lg font-semibold">Change Password</h3>
-            <p className="mb-4 text-sm text-muted-foreground">Update your account password</p>
-            {cpSuccess && (
-              <div className="mb-3 rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
-                {cpSuccess}
-              </div>
-            )}
-            {cpError && (
-              <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
-                {cpError}
-              </div>
-            )}
-            <form onSubmit={handleChangePassword} className="space-y-3">
+        <div className="modal-overlay" onClick={() => setShowChangePw(false)} role="dialog" aria-modal="true" aria-labelledby="change-pw-title">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
               <div>
-                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Current Password</label>
-                <input
-                  type="password"
-                  className="input-field"
-                  value={cpForm.currentPassword}
-                  onChange={(e) => setCpForm({ ...cpForm, currentPassword: e.target.value })}
-                  required
-                  autoFocus
-                />
+                <span className="modal-eyebrow">Account</span>
+                <h3 id="change-pw-title" className="modal-title">Change Password</h3>
+                <p className="modal-subtitle">Update your account password.</p>
               </div>
-              <div>
-                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">New Password</label>
-                <input
-                  type="password"
-                  className="input-field"
-                  value={cpForm.newPassword}
-                  onChange={(e) => setCpForm({ ...cpForm, newPassword: e.target.value })}
-                  minLength={8}
-                  required
-                  placeholder="Min 8 characters"
-                />
+              <button type="button" className="modal-close" onClick={() => setShowChangePw(false)} aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={handleChangePassword}>
+              <div className="modal-body space-y-3">
+                {cpSuccess && (
+                  <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 dark:border-green-800 dark:bg-green-900/20 dark:text-green-300">
+                    {cpSuccess}
+                  </div>
+                )}
+                {cpError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                    {cpError}
+                  </div>
+                )}
+                <div>
+                  <label className="field-label">Current Password</label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={cpForm.currentPassword}
+                    onChange={(e) => setCpForm({ ...cpForm, currentPassword: e.target.value })}
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="field-label">New Password</label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={cpForm.newPassword}
+                    onChange={(e) => setCpForm({ ...cpForm, newPassword: e.target.value })}
+                    minLength={8}
+                    required
+                    placeholder="Min 8 characters"
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Confirm New Password</label>
+                  <input
+                    type="password"
+                    className="input-field"
+                    value={cpForm.confirmPassword}
+                    onChange={(e) => setCpForm({ ...cpForm, confirmPassword: e.target.value })}
+                    minLength={8}
+                    required
+                  />
+                </div>
               </div>
-              <div>
-                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Confirm New Password</label>
-                <input
-                  type="password"
-                  className="input-field"
-                  value={cpForm.confirmPassword}
-                  onChange={(e) => setCpForm({ ...cpForm, confirmPassword: e.target.value })}
-                  minLength={8}
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-1">
+              <div className="modal-footer">
                 <button type="button" className="secondary-button" onClick={() => setShowChangePw(false)}>Cancel</button>
                 <button type="submit" className="primary-button">Change Password</button>
               </div>
