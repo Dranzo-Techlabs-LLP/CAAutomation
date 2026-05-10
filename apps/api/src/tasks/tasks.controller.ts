@@ -89,4 +89,21 @@ export class TasksController {
     this.lifecycle?.onTaskResolutionAdded(result.id, user.firmId, user.id);
     return result;
   }
+
+  // ── Subtasks ────────────────────────────────────────────────────────────
+  @Get(':id/subtasks')
+  @Permissions('task.view')
+  async listSubtasks(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<TaskResponseDto[]> {
+    return this.tasksService.listSubtasks(user.firmId, id);
+  }
+
+  @Post(':id/subtasks')
+  @Permissions('task.create')
+  async createSubtask(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { title: string; description?: string; assignedToUserId?: string; dueDate?: string; estimatedHours?: string },
+  ): Promise<TaskResponseDto> {
+    return this.tasksService.createSubtask(user.firmId, id, body, user.id);
+  }
 }

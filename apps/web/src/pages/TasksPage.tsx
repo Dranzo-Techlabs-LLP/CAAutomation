@@ -23,6 +23,7 @@ interface Task {
 interface Comment { id: string; userId: string; body: string; createdAt: string; }
 interface Attachment { id: string; fileName: string; fileUrl: string; mimeType: string; sizeBytes: string; tag: string; createdAt: string; uploadedByUserId: string; }
 interface TimeLogEntry { id: string; userId: string; startedAt: string; endedAt?: string; durationMinutes?: number; notes?: string; isBillable: boolean; }
+interface Subtask { id: string; title: string; description?: string | null; status: string; priority: string; assignedToUserId?: string | null; dueDate?: string | null; }
 
 /* ── Constants ── */
 const STATUSES = ['unassigned', 'assigned', 'in_progress', 'on_hold', 'review', 'completed', 'cancelled'];
@@ -47,7 +48,7 @@ const PRIORITY_DOT: Record<string, string> = { low: 'bg-gray-400', medium: 'bg-b
 const PRIORITY_COLORS: Record<string, string> = { low: 'text-gray-500', medium: 'text-blue-600', high: 'text-orange-600', urgent: 'text-red-600 font-bold' };
 
 type ViewMode = 'list' | 'kanban';
-type DetailTab = 'details' | 'comments' | 'attachments' | 'efforts';
+type DetailTab = 'details' | 'subtasks' | 'comments' | 'attachments' | 'efforts';
 
 /* ── Main Page ── */
 export default function TasksPage() {
@@ -312,6 +313,8 @@ function TaskDetailPanel({
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
+  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [newSubtask, setNewSubtask] = useState({ title: '', assignedToUserId: '', dueDate: '' });
   const [commentText, setCommentText] = useState('');
   const [resolution, setResolution] = useState(task.resolution || '');
   const [editingResolution, setEditingResolution] = useState(false);
@@ -337,12 +340,55 @@ function TaskDetailPanel({
   const loadComments = () => api<Comment[]>(`/tasks/${task.id}/comments`).then(setComments).catch(() => {});
   const loadAttachments = () => api<Attachment[]>(`/attachments/task/${task.id}`).then(setAttachments).catch(() => {});
   const loadTimeLogs = () => api<TimeLogEntry[]>(`/time-logs/task/${task.id}`).then(setTimeLogs).catch(() => {});
+  const loadSubtasks = () => api<Subtask[]>(`/tasks/${task.id}/subtasks`).then(setSubtasks).catch(() => {});
 
   useEffect(() => {
     loadComments();
     loadAttachments();
     loadTimeLogs();
+    loadSubtasks();
   }, [task.id]);
+
+  const addSubtask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubtask.title.trim()) return;
+    try {
+      await api(`/tasks/${task.id}/subtasks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: newSubtask.title,
+          assignedToUserId: newSubtask.assignedToUserId || undefined,
+          dueDate: newSubtask.dueDate ? new Date(newSubtask.dueDate).toISOString() : undefined,
+        }),
+      });
+      setNewSubtask({ title: '', assignedToUserId: '', dueDate: '' });
+      loadSubtasks();
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'Failed');
+    }
+  };
+
+  const updateSubtaskStatus = async (id: string, status: string) => {
+    try {
+      await api(`/tasks/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      loadSubtasks();
+    } catch {}
+  };
+
+  const updateSubtaskField = async (id: string, fields: Record<string, unknown>) => {
+    try {
+      await api(`/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(fields) });
+      loadSubtasks();
+    } catch {}
+  };
+
+  const deleteSubtask = async (id: string) => {
+    if (!confirm('Delete this subtask?')) return;
+    try {
+      await api(`/tasks/${id}`, { method: 'DELETE' });
+      loadSubtasks();
+    } catch {}
+  };
 
   const handleComment = async () => {
     if (!commentText.trim()) return;
@@ -427,6 +473,7 @@ function TaskDetailPanel({
 
   const tabs: { key: DetailTab; label: string; count?: number }[] = [
     { key: 'details', label: 'Details' },
+    { key: 'subtasks', label: 'Subtasks', count: subtasks.length },
     { key: 'comments', label: 'Discussion', count: comments.length },
     { key: 'attachments', label: 'Attachments', count: attachments.length },
     { key: 'efforts', label: 'Efforts', count: timeLogs.length },
@@ -651,6 +698,91 @@ function TaskDetailPanel({
                     )}
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* Subtasks Tab */}
+          {tab === 'subtasks' && (
+            <div className="space-y-3">
+              {/* Progress */}
+              {subtasks.length > 0 && (() => {
+                const done = subtasks.filter((s) => s.status === 'completed').length;
+                const pct = Math.round((done / subtasks.length) * 100);
+                return (
+                  <div className="rounded-lg border border-border bg-accent/20 p-3">
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-foreground">Progress</span>
+                      <span className="font-mono text-muted-foreground">{done} / {subtasks.length} done · {pct}%</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-border">
+                      <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Add */}
+              {canEdit && (
+                <form onSubmit={addSubtask} className="rounded-lg border border-border bg-panel p-3 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Add Subtask</div>
+                  <div className="grid gap-2 sm:grid-cols-12">
+                    <input className="input-field sm:col-span-6" placeholder="Subtask title..." value={newSubtask.title} onChange={(e) => setNewSubtask({ ...newSubtask, title: e.target.value })} required />
+                    <select className="input-field sm:col-span-3" value={newSubtask.assignedToUserId} onChange={(e) => setNewSubtask({ ...newSubtask, assignedToUserId: e.target.value })}>
+                      <option value="">Unassigned</option>
+                      {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                    <input type="date" className="input-field sm:col-span-2" value={newSubtask.dueDate} onChange={(e) => setNewSubtask({ ...newSubtask, dueDate: e.target.value })} />
+                    <button type="submit" className="primary-button text-xs sm:col-span-1">Add</button>
+                  </div>
+                </form>
+              )}
+
+              {/* List */}
+              {subtasks.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-8 text-center">
+                  <p className="text-sm font-medium text-foreground">No subtasks yet</p>
+                  <p className="mt-1 text-[11.5px] text-muted-foreground">Break this task into smaller steps. Pre-defined templates from Services auto-populate here.</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+                  {subtasks.map((s) => {
+                    const done = s.status === 'completed';
+                    return (
+                      <li key={s.id} className={`flex items-start gap-3 p-3 transition-colors ${done ? 'bg-green-50/50 dark:bg-green-900/10' : 'hover:bg-accent/30'}`}>
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 cursor-pointer accent-current"
+                          checked={done}
+                          disabled={!canEdit}
+                          onChange={() => updateSubtaskStatus(s.id, done ? 'in_progress' : 'completed')}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className={`text-sm font-medium ${done ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{s.title}</div>
+                          {s.description && <p className="mt-0.5 text-[11.5px] text-muted-foreground whitespace-pre-wrap">{s.description}</p>}
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                            <span className={`rounded px-1.5 py-0.5 font-semibold ${STATUS_COLORS[s.status] || 'bg-accent text-foreground'}`}>{s.status.replace(/_/g, ' ')}</span>
+                            <span className={`rounded px-1.5 py-0.5 font-semibold capitalize ${PRIORITY_COLORS[s.priority] || ''} bg-accent`}>{s.priority}</span>
+                            {canEdit ? (
+                              <select className="rounded border border-border bg-panel px-1 py-0.5 text-[11px]" value={s.assignedToUserId || ''} onChange={(e) => updateSubtaskField(s.id, { assignedToUserId: e.target.value || null })}>
+                                <option value="">Unassigned</option>
+                                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                              </select>
+                            ) : (
+                              <span className="text-muted-foreground">{s.assignedToUserId ? userMap[s.assignedToUserId] : 'Unassigned'}</span>
+                            )}
+                            {s.dueDate && <span className="text-muted-foreground">Due {new Date(s.dueDate).toLocaleDateString('en-IN')}</span>}
+                          </div>
+                        </div>
+                        {canEdit && (
+                          <button onClick={() => deleteSubtask(s.id)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" title="Delete subtask">
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14" /></svg>
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           )}

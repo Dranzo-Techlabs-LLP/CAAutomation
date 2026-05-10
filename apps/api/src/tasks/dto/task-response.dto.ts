@@ -14,6 +14,9 @@ export class TaskResponseDto {
   @ApiPropertyOptional()
   serviceId?: string | null;
 
+  @ApiPropertyOptional()
+  parentTaskId?: string | null;
+
   @ApiProperty()
   title!: string;
 

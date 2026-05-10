@@ -1,19 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { IsNull, LessThan, Repository } from 'typeorm';
 import { PaginatedResponseDto } from '../common/dto/paginated-response.dto';
 import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
+import { ServiceSubtaskTemplate } from '../services-catalog/service-subtask-template.entity';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskResolutionDto } from './dto/update-task-resolution.dto';
 import { TaskResponseDto } from './dto/task-response.dto';
-import { Task, TaskStatus } from './task.entity';
+import { Task, TaskGeneratedBy, TaskPriority, TaskStatus } from './task.entity';
 
 @Injectable()
 export class TasksService {
   constructor(
     @InjectRepository(Task)
     private readonly taskRepository: Repository<Task>,
+    @InjectRepository(ServiceSubtaskTemplate)
+    private readonly templateRepository: Repository<ServiceSubtaskTemplate>,
   ) {}
 
   async create(firmId: string, dto: CreateTaskDto, actorUserId: string): Promise<TaskResponseDto> {
@@ -30,12 +33,30 @@ export class TasksService {
       createdBy: actorUserId,
       updatedBy: actorUserId,
     });
-    return this.toResponse(await this.taskRepository.save(task));
+    const saved = await this.taskRepository.save(task);
+
+    // Auto-create subtasks from service templates if (a) parent task,
+    // (b) linked to a service, and (c) caller did not opt out.
+    // Subtask creation is skipped automatically if the task itself is a subtask
+    // (parentTaskId set) to avoid recursive creation, and when the source is
+    // recurrence/workflow which manage their own children.
+    if (
+      saved.serviceId &&
+      !saved.parentTaskId &&
+      saved.generatedBy !== TaskGeneratedBy.Recurrence
+    ) {
+      await this.materializeSubtasksFromTemplates(firmId, saved, actorUserId);
+    }
+    return this.toResponse(saved);
   }
 
   async list(firmId: string, query: PaginationQueryDto): Promise<PaginatedResponseDto<TaskResponseDto>> {
     const limit = query.limit ?? 50;
-    const where = query.cursor ? { firmId, createdAt: LessThan(new Date(query.cursor)) } : { firmId };
+    // Hide subtasks from main list by default — they live under their parent
+    const baseWhere = { firmId, parentTaskId: IsNull() };
+    const where = query.cursor
+      ? { ...baseWhere, createdAt: LessThan(new Date(query.cursor)) }
+      : baseWhere;
     const tasks = await this.taskRepository.find({
       where,
       order: { createdAt: 'DESC' },
@@ -95,6 +116,8 @@ export class TasksService {
 
   async delete(firmId: string, id: string): Promise<void> {
     const task = await this.getEntityOrFail(firmId, id);
+    // Cascade-delete subtasks when removing parent
+    await this.taskRepository.delete({ firmId, parentTaskId: id });
     await this.taskRepository.remove(task);
   }
 
@@ -138,12 +161,77 @@ export class TasksService {
     return this.taskRepository.save(task);
   }
 
+  // ── Subtasks ──────────────────────────────────────────────────────────────
+
+  async listSubtasks(firmId: string, parentId: string): Promise<TaskResponseDto[]> {
+    await this.getEntityOrFail(firmId, parentId);
+    const subs = await this.taskRepository.find({
+      where: { firmId, parentTaskId: parentId },
+      order: { createdAt: 'ASC' },
+    });
+    return subs.map((t) => this.toResponse(t));
+  }
+
+  async createSubtask(
+    firmId: string,
+    parentId: string,
+    body: { title: string; description?: string; priority?: TaskPriority; estimatedHours?: string; assignedToUserId?: string; dueDate?: string },
+    actorUserId: string,
+  ): Promise<TaskResponseDto> {
+    const parent = await this.getEntityOrFail(firmId, parentId);
+    const assigned = Boolean(body.assignedToUserId);
+    const sub = this.taskRepository.create({
+      firmId,
+      customerId: parent.customerId,
+      serviceId: parent.serviceId,
+      parentTaskId: parent.id,
+      title: body.title,
+      description: body.description ?? null,
+      priority: body.priority ?? parent.priority,
+      status: assigned ? TaskStatus.Assigned : TaskStatus.Unassigned,
+      assignedToUserId: body.assignedToUserId ?? null,
+      dueDate: body.dueDate ? new Date(body.dueDate) : null,
+      estimatedHours: body.estimatedHours ?? null,
+      generatedBy: TaskGeneratedBy.Manual,
+      createdBy: actorUserId,
+      updatedBy: actorUserId,
+    });
+    return this.toResponse(await this.taskRepository.save(sub));
+  }
+
+  private async materializeSubtasksFromTemplates(firmId: string, parent: Task, actorUserId: string): Promise<void> {
+    if (!parent.serviceId) return;
+    const templates = await this.templateRepository.find({
+      where: { firmId, serviceId: parent.serviceId },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+    if (!templates.length) return;
+    const subs = templates.map((t) =>
+      this.taskRepository.create({
+        firmId,
+        customerId: parent.customerId,
+        serviceId: parent.serviceId,
+        parentTaskId: parent.id,
+        title: t.title,
+        description: t.description ?? null,
+        priority: t.priority,
+        status: TaskStatus.Unassigned,
+        estimatedHours: t.estimatedHours ?? null,
+        generatedBy: TaskGeneratedBy.Manual,
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
+      }),
+    );
+    await this.taskRepository.save(subs);
+  }
+
   toResponse(task: Task): TaskResponseDto {
     return {
       id: task.id,
       firmId: task.firmId,
       customerId: task.customerId,
       serviceId: task.serviceId,
+      parentTaskId: task.parentTaskId,
       title: task.title,
       description: task.description,
       resolution: task.resolution,

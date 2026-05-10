@@ -41,6 +41,7 @@ import { RecurrencesModule } from './recurrences/recurrences.module';
 import { TaskRecurrence } from './recurrences/task-recurrence.entity';
 import { SchedulerModule } from './scheduler/scheduler.module';
 import { ServiceCatalog } from './services-catalog/service-catalog.entity';
+import { ServiceSubtaskTemplate } from './services-catalog/service-subtask-template.entity';
 import { ServicesCatalogModule } from './services-catalog/services-catalog.module';
 import { TaskComment } from './task-comments/task-comment.entity';
 import { TaskCommentsModule } from './task-comments/task-comments.module';
@@ -89,6 +90,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
           Customer,
           Enquiry,
           ServiceCatalog,
+          ServiceSubtaskTemplate,
           Task,
           TaskComment,
           Attachment,
