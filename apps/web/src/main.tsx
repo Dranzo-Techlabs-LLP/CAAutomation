@@ -130,8 +130,8 @@ function AppShell() {
       )}
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-border bg-panel transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex h-16 items-center justify-between border-b border-border px-5">
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-panel transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-border px-5">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
               <ShieldCheck className="h-4.5 w-4.5 text-primary" />
@@ -143,7 +143,7 @@ function AppShell() {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto px-3 py-2" style={{ maxHeight: 'calc(100vh - 136px)' }}>
+        <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
           {sections.map((section) => {
             const items = visibleNav.filter((n) => n.section === section);
             if (items.length === 0) return null;
@@ -177,7 +177,7 @@ function AppShell() {
           })}
         </nav>
 
-        <div className="absolute bottom-0 left-0 right-0 border-t border-border p-3">
+        <div className="flex-shrink-0 border-t border-border p-3">
           <div className="mb-2 flex items-center gap-2 rounded-lg bg-accent/50 px-3 py-2">
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
               {user.name?.charAt(0)?.toUpperCase() || 'U'}
