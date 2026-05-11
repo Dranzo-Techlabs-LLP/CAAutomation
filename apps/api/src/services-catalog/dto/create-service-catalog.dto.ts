@@ -50,4 +50,9 @@ export class CreateServiceCatalogDto {
   @IsOptional()
   @IsNumberString()
   defaultGstRate?: string;
+
+  @ApiPropertyOptional({ description: 'Default hourly rate in paise (used to compute revenue from time logs)' })
+  @IsOptional()
+  @IsNumberString()
+  defaultHourlyRate?: string;
 }

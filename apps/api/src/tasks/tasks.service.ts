@@ -146,6 +146,7 @@ export class TasksService {
     if (dto.reviewDate !== undefined) task.reviewDate = dto.reviewDate ? new Date(dto.reviewDate) : null;
     if (dto.clientDueDate !== undefined) task.clientDueDate = dto.clientDueDate ? new Date(dto.clientDueDate) : null;
     if (dto.resolution !== undefined) task.resolution = dto.resolution;
+    if (dto.hourlyRate !== undefined) task.hourlyRate = dto.hourlyRate || null;
     task.updatedBy = actorUserId;
     const saved = await this.taskRepository.save(task);
     await this.writeAudit('task.updated', firmId, saved.id, actorUserId, before, this.snapshot(saved));

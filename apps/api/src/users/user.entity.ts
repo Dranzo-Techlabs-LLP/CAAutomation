@@ -27,6 +27,12 @@ export class User extends TenantAuditColumns {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
+  @Column({ name: 'default_hourly_rate', type: 'bigint', nullable: true })
+  defaultHourlyRate?: string | null; // paise per hour, fallback when no task/service rate
+
+  @Column({ name: 'cost_rate', type: 'bigint', nullable: true })
+  costRate?: string | null; // paise per hour internal cost (used for margin)
+
   @Column({ name: 'last_login_at', type: 'datetime', precision: 6, nullable: true })
   lastLoginAt?: Date | null;
 

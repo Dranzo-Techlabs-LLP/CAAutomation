@@ -63,4 +63,14 @@ export class UsersController {
     await this.usersService.resetPassword(id, user.firmId, dto.newPassword);
     return { message: 'Password reset successfully' };
   }
+
+  @Patch(':id/rates')
+  @Permissions('user.create')
+  async updateRates(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { defaultHourlyRate?: string | null; costRate?: string | null },
+  ): Promise<UserResponseDto> {
+    return this.usersService.updateRates(id, user.firmId, body, user.id);
+  }
 }

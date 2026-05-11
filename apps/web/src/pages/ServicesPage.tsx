@@ -11,6 +11,7 @@ interface Service {
   hsnSac?: string | null;
   defaultGstRate?: string | null;
   defaultBillingAmount?: string;
+  defaultHourlyRate?: string | null;
   recurrenceDefault: string;
   defaultAssigneeStrategy?: string;
 }
@@ -35,7 +36,7 @@ export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingService, setEditingService] = useState<Service | null>(null);
-  const [form, setForm] = useState({ code: '', name: '', description: '', hsnSac: '', defaultGstRate: '18', defaultBillingAmount: '', recurrenceDefault: 'none' });
+  const [form, setForm] = useState({ code: '', name: '', description: '', hsnSac: '', defaultGstRate: '18', defaultBillingAmount: '', defaultHourlyRate: '', recurrenceDefault: 'none' });
   const [error, setError] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -131,7 +132,7 @@ export default function ServicesPage() {
   };
 
   const resetForm = () => {
-    setForm({ code: '', name: '', description: '', hsnSac: '', defaultGstRate: '18', defaultBillingAmount: '', recurrenceDefault: 'none' });
+    setForm({ code: '', name: '', description: '', hsnSac: '', defaultGstRate: '18', defaultBillingAmount: '', defaultHourlyRate: '', recurrenceDefault: 'none' });
     setShowForm(false);
     setEditingService(null);
     setError('');
@@ -158,6 +159,7 @@ export default function ServicesPage() {
       hsnSac: s.hsnSac || '',
       defaultGstRate: s.defaultGstRate || '18',
       defaultBillingAmount: s.defaultBillingAmount || '',
+      defaultHourlyRate: s.defaultHourlyRate || '',
       recurrenceDefault: s.recurrenceDefault,
     });
     setShowForm(false);
@@ -237,6 +239,21 @@ export default function ServicesPage() {
                 placeholder="5000.00"
               />
               {form.defaultBillingAmount && Number(form.defaultBillingAmount) > 0 && <p className="mt-0.5 text-[10.5px] text-muted-foreground">Stored as {form.defaultBillingAmount} paise</p>}
+            </div>
+            <div>
+              <label className="field-label">Default Hourly Rate (₹/hr)</label>
+              <input
+                className="input-field"
+                type="number"
+                step="0.01"
+                value={form.defaultHourlyRate ? (Number(form.defaultHourlyRate) / 100).toString() : ''}
+                onChange={(e) => {
+                  const rupees = Number(e.target.value || 0);
+                  setForm({ ...form, defaultHourlyRate: rupees > 0 ? String(Math.round(rupees * 100)) : '' });
+                }}
+                placeholder="2000.00"
+              />
+              <p className="mt-0.5 text-[10.5px] text-muted-foreground">Used to compute revenue from time logs on this service.</p>
             </div>
             <div>
               <label className="field-label">Recurrence</label>

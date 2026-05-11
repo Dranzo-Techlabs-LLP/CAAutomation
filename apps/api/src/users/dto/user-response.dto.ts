@@ -21,4 +21,10 @@ export class UserResponseDto {
 
   @ApiProperty()
   isActive!: boolean;
+
+  @ApiPropertyOptional()
+  defaultHourlyRate?: string | null;
+
+  @ApiPropertyOptional()
+  costRate?: string | null;
 }

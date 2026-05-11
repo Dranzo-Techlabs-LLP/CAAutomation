@@ -86,6 +86,11 @@ export class CreateTaskDto {
   @IsString()
   billingAmount?: string;
 
+  @ApiPropertyOptional({ description: 'Per-hour rate in paise (overrides service default)' })
+  @IsOptional()
+  @IsString()
+  hourlyRate?: string;
+
   @ApiPropertyOptional({ enum: TaskGeneratedBy })
   @IsOptional()
   @IsEnum(TaskGeneratedBy)

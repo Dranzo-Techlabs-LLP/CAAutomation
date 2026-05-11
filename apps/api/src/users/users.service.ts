@@ -53,6 +53,8 @@ export class UsersService {
       phone: dto.phone,
       roleId: dto.roleId,
       passwordHash: await bcrypt.hash(dto.password, rounds),
+      defaultHourlyRate: dto.defaultHourlyRate ?? null,
+      costRate: dto.costRate ?? null,
       createdBy: actorUserId,
       updatedBy: actorUserId,
     });
@@ -85,6 +87,20 @@ export class UsersService {
     await this.userRepository.update({ id: userId }, { passwordHash });
   }
 
+  async updateRates(
+    userId: string,
+    firmId: string,
+    body: { defaultHourlyRate?: string | null; costRate?: string | null },
+    actorUserId: string,
+  ): Promise<UserResponseDto> {
+    const user = await this.userRepository.findOne({ where: { id: userId, firmId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (body.defaultHourlyRate !== undefined) user.defaultHourlyRate = body.defaultHourlyRate || null;
+    if (body.costRate !== undefined) user.costRate = body.costRate || null;
+    user.updatedBy = actorUserId;
+    return this.toResponse(await this.userRepository.save(user));
+  }
+
   async markLogin(userId: string): Promise<void> {
     await this.userRepository.update({ id: userId }, { lastLoginAt: new Date() });
   }
@@ -98,6 +114,8 @@ export class UsersService {
       phone: user.phone,
       roleId: user.roleId,
       isActive: user.isActive,
+      defaultHourlyRate: user.defaultHourlyRate ?? null,
+      costRate: user.costRate ?? null,
     };
   }
 }

@@ -42,4 +42,7 @@ export class ServiceCatalog extends TenantAuditColumns {
 
   @Column({ name: 'default_gst_rate', type: 'decimal', precision: 5, scale: 2, nullable: true })
   defaultGstRate?: string | null;
+
+  @Column({ name: 'default_hourly_rate', type: 'bigint', nullable: true })
+  defaultHourlyRate?: string | null; // paise per hour, used for revenue calc on time logs
 }

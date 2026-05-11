@@ -25,6 +25,7 @@ import ServicesPage from './pages/ServicesPage';
 import ComplianceCalendarPage from './pages/ComplianceCalendarPage';
 import WorkflowsPage from './pages/WorkflowsPage';
 import ReportsPage from './pages/ReportsPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 import PaymentAdvicesPage from './pages/PaymentAdvicesPage';
 import RolesPage from './pages/RolesPage';
 import SettingsPage from './pages/SettingsPage';
@@ -53,6 +54,7 @@ const NAV: NavEntry[] = [
   { path: '/payment-advices', label: 'Payment Advices', icon: <Receipt />, permission: 'billing.view', section: 'manage' },
   { path: '/workflows', label: 'Workflows', icon: <Workflow />, permission: 'workflow.view', section: 'manage' },
   { path: '/reports', label: 'Reports', icon: <LineChart />, permission: 'report.view', section: 'manage' },
+  { path: '/analytics', label: 'Analytics', icon: <BarChart3 />, permission: 'report.view', section: 'manage' },
   { path: '/notifications', label: 'Notifications', icon: <Bell />, section: 'system' },
   { path: '/audit', label: 'Audit Logs', icon: <Shield />, permission: 'audit.view', section: 'system' },
   { path: '/settings', label: 'Settings', icon: <Settings />, permission: 'settings.edit', section: 'system' },
@@ -235,6 +237,7 @@ function AppShell() {
           <Route path="/compliance" element={<ComplianceCalendarPage />} />
           <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/settings" element={<SettingsPage />} />

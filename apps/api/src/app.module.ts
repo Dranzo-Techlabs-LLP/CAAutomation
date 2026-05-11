@@ -45,6 +45,7 @@ import { ServiceSubtaskTemplate } from './services-catalog/service-subtask-templ
 import { ServicesCatalogModule } from './services-catalog/services-catalog.module';
 import { TaskStatusEntity } from './task-statuses/task-status.entity';
 import { TaskStatusesModule } from './task-statuses/task-statuses.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { TaskComment } from './task-comments/task-comment.entity';
 import { TaskCommentsModule } from './task-comments/task-comments.module';
 import { Task } from './tasks/task.entity';
@@ -160,6 +161,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     SettingsModule,
     ReportsModule,
     TaskStatusesModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

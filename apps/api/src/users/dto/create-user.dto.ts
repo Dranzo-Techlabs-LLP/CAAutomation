@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { IsEmail, IsNumberString, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty()
@@ -23,4 +23,14 @@ export class CreateUserDto {
   @ApiProperty()
   @IsUUID()
   roleId!: string;
+
+  @ApiPropertyOptional({ description: 'Default billing rate paise/hour for time logs' })
+  @IsOptional()
+  @IsNumberString()
+  defaultHourlyRate?: string;
+
+  @ApiPropertyOptional({ description: 'Internal cost rate paise/hour (for margin)' })
+  @IsOptional()
+  @IsNumberString()
+  costRate?: string;
 }

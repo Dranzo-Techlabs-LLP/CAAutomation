@@ -11,6 +11,8 @@ interface UserItem {
   isActive: boolean;
   roleId: string;
   lastLoginAt?: string;
+  defaultHourlyRate?: string | null;
+  costRate?: string | null;
 }
 
 interface RoleItem {
@@ -39,12 +41,14 @@ export default function UsersPage() {
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingRole, setEditingRole] = useState<string | null>(null);
   const [selectedPermIds, setSelectedPermIds] = useState<string[]>([]);
-  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', roleId: '', phone: '' });
+  const [userForm, setUserForm] = useState({ name: '', email: '', password: '', roleId: '', phone: '', defaultHourlyRate: '', costRate: '' });
   const [error, setError] = useState('');
   const [resetTarget, setResetTarget] = useState<UserItem | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [resetError, setResetError] = useState('');
   const [resetSuccess, setResetSuccess] = useState('');
+  const [rateTarget, setRateTarget] = useState<UserItem | null>(null);
+  const [rateForm, setRateForm] = useState({ defaultHourlyRate: '', costRate: '' });
 
   const loadUsers = () => api<UserItem[]>('/users').then(setUsers).catch(() => {});
   const loadRoles = () => api<RoleItem[]>('/roles').then(setRoles).catch(() => {});
@@ -59,9 +63,13 @@ export default function UsersPage() {
     e.preventDefault();
     setError('');
     try {
-      await api('/users', { method: 'POST', body: JSON.stringify(userForm) });
+      await api('/users', { method: 'POST', body: JSON.stringify({
+        ...userForm,
+        defaultHourlyRate: userForm.defaultHourlyRate || undefined,
+        costRate: userForm.costRate || undefined,
+      }) });
       setShowUserForm(false);
-      setUserForm({ name: '', email: '', password: '', roleId: '', phone: '' });
+      setUserForm({ name: '', email: '', password: '', roleId: '', phone: '', defaultHourlyRate: '', costRate: '' });
       loadUsers();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed');
@@ -162,6 +170,35 @@ export default function UsersPage() {
                   <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Phone</label>
                   <input className="input-field" value={userForm.phone} onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })} />
                 </div>
+                <div>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Default Hourly Rate (₹/hr)</label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    step="0.01"
+                    placeholder="2000.00"
+                    value={userForm.defaultHourlyRate ? (Number(userForm.defaultHourlyRate) / 100).toString() : ''}
+                    onChange={(e) => {
+                      const r = Number(e.target.value || 0);
+                      setUserForm({ ...userForm, defaultHourlyRate: r > 0 ? String(Math.round(r * 100)) : '' });
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Cost Rate (₹/hr)</label>
+                  <input
+                    className="input-field"
+                    type="number"
+                    step="0.01"
+                    placeholder="1000.00"
+                    value={userForm.costRate ? (Number(userForm.costRate) / 100).toString() : ''}
+                    onChange={(e) => {
+                      const r = Number(e.target.value || 0);
+                      setUserForm({ ...userForm, costRate: r > 0 ? String(Math.round(r * 100)) : '' });
+                    }}
+                  />
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">Internal cost (used for margin calc).</p>
+                </div>
               </div>
               <button type="submit" className="primary-button">Create User</button>
             </form>
@@ -174,6 +211,8 @@ export default function UsersPage() {
                   <th className="py-2">Name</th>
                   <th>Email</th>
                   <th>Role</th>
+                  <th>Bill Rate</th>
+                  <th>Cost Rate</th>
                   <th>Status</th>
                   <th>Last Login</th>
                   {canCreateUser && <th>Actions</th>}
@@ -185,6 +224,8 @@ export default function UsersPage() {
                     <td className="py-3 font-medium">{u.name}</td>
                     <td>{u.email}</td>
                     <td>{roleMap[u.roleId] || '-'}</td>
+                    <td className="text-xs">{u.defaultHourlyRate ? `₹${(Number(u.defaultHourlyRate) / 100).toLocaleString('en-IN')}/hr` : <span className="text-muted-foreground">-</span>}</td>
+                    <td className="text-xs">{u.costRate ? `₹${(Number(u.costRate) / 100).toLocaleString('en-IN')}/hr` : <span className="text-muted-foreground">-</span>}</td>
                     <td>
                       <span className={`rounded px-2 py-1 text-xs ${u.isActive ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
                         {u.isActive ? 'Active' : 'Inactive'}
@@ -193,12 +234,20 @@ export default function UsersPage() {
                     <td className="text-xs">{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-IN') : 'Never'}</td>
                     {canCreateUser && (
                       <td>
-                        <button
-                          className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-                          onClick={() => { setResetTarget(u); setNewPassword(''); setResetError(''); setResetSuccess(''); }}
-                        >
-                          Reset Password
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                            onClick={() => { setRateTarget(u); setRateForm({ defaultHourlyRate: u.defaultHourlyRate || '', costRate: u.costRate || '' }); }}
+                          >
+                            Rates
+                          </button>
+                          <button
+                            className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                            onClick={() => { setResetTarget(u); setNewPassword(''); setResetError(''); setResetSuccess(''); }}
+                          >
+                            Reset Password
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -311,6 +360,80 @@ export default function UsersPage() {
                 <button type="submit" className="primary-button">Reset Password</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Rates Modal */}
+      {rateTarget && (
+        <div className="modal-overlay" onClick={() => setRateTarget(null)} role="dialog" aria-modal="true">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">Billing Rates</span>
+                <h3 className="modal-title">{rateTarget.name}</h3>
+                <p className="modal-subtitle">Default per-hour rates for new time logs by this user</p>
+              </div>
+              <button className="modal-close" onClick={() => setRateTarget(null)} aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="modal-body space-y-3">
+              <div>
+                <label className="field-label">Bill Rate (₹/hr)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-field"
+                  placeholder="2000.00"
+                  value={rateForm.defaultHourlyRate ? (Number(rateForm.defaultHourlyRate) / 100).toString() : ''}
+                  onChange={(e) => {
+                    const r = Number(e.target.value || 0);
+                    setRateForm({ ...rateForm, defaultHourlyRate: r > 0 ? String(Math.round(r * 100)) : '' });
+                  }}
+                />
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Charged to clients (revenue from time logs).</p>
+              </div>
+              <div>
+                <label className="field-label">Cost Rate (₹/hr)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="input-field"
+                  placeholder="1000.00"
+                  value={rateForm.costRate ? (Number(rateForm.costRate) / 100).toString() : ''}
+                  onChange={(e) => {
+                    const r = Number(e.target.value || 0);
+                    setRateForm({ ...rateForm, costRate: r > 0 ? String(Math.round(r * 100)) : '' });
+                  }}
+                />
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Internal cost (used for margin in analytics).</p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="secondary-button" onClick={() => setRateTarget(null)}>Cancel</button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={async () => {
+                  try {
+                    await api(`/users/${rateTarget.id}/rates`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({
+                        defaultHourlyRate: rateForm.defaultHourlyRate || null,
+                        costRate: rateForm.costRate || null,
+                      }),
+                    });
+                    setRateTarget(null);
+                    loadUsers();
+                  } catch (err: unknown) {
+                    alert(err instanceof Error ? err.message : 'Failed');
+                  }
+                }}
+              >
+                Save Rates
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -105,6 +105,9 @@ export class Task extends TenantAuditColumns {
   @Column({ name: 'billing_amount', type: 'bigint', nullable: true })
   billingAmount?: string | null;
 
+  @Column({ name: 'hourly_rate', type: 'bigint', nullable: true })
+  hourlyRate?: string | null; // paise per hour override (falls back to service.defaultHourlyRate, then user.defaultHourlyRate)
+
   @Column({ name: 'invoice_id', type: 'varchar', length: 36, nullable: true })
   invoiceId?: string | null;
 }
