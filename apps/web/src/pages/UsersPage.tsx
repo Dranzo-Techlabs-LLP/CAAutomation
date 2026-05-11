@@ -49,6 +49,9 @@ export default function UsersPage() {
   const [resetSuccess, setResetSuccess] = useState('');
   const [rateTarget, setRateTarget] = useState<UserItem | null>(null);
   const [rateForm, setRateForm] = useState({ defaultHourlyRate: '', costRate: '' });
+  const [editTarget, setEditTarget] = useState<UserItem | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', roleId: '', isActive: true });
+  const [editError, setEditError] = useState('');
 
   const loadUsers = () => api<UserItem[]>('/users').then(setUsers).catch(() => {});
   const loadRoles = () => api<RoleItem[]>('/roles').then(setRoles).catch(() => {});
@@ -237,6 +240,16 @@ export default function UsersPage() {
                         <div className="flex items-center gap-2">
                           <button
                             className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+                            onClick={() => {
+                              setEditTarget(u);
+                              setEditForm({ name: u.name, email: u.email, phone: u.phone || '', roleId: u.roleId, isActive: u.isActive });
+                              setEditError('');
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="rounded px-2 py-1 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
                             onClick={() => { setRateTarget(u); setRateForm({ defaultHourlyRate: u.defaultHourlyRate || '', costRate: u.costRate || '' }); }}
                           >
                             Rates
@@ -358,6 +371,76 @@ export default function UsersPage() {
               <div className="modal-footer">
                 <button type="button" className="secondary-button" onClick={() => setResetTarget(null)}>Cancel</button>
                 <button type="submit" className="primary-button">Reset Password</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editTarget && (
+        <div className="modal-overlay" onClick={() => setEditTarget(null)} role="dialog" aria-modal="true">
+          <div className="modal-card modal-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">User</span>
+                <h3 className="modal-title">Edit {editTarget.name}</h3>
+                <p className="modal-subtitle">Update profile + role + active status. For password use Reset Password.</p>
+              </div>
+              <button className="modal-close" onClick={() => setEditTarget(null)} aria-label="Close">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              setEditError('');
+              try {
+                await api(`/users/${editTarget.id}`, {
+                  method: 'PATCH',
+                  body: JSON.stringify({
+                    name: editForm.name,
+                    email: editForm.email,
+                    phone: editForm.phone || null,
+                    roleId: editForm.roleId,
+                    isActive: editForm.isActive,
+                  }),
+                });
+                setEditTarget(null);
+                loadUsers();
+              } catch (err: unknown) {
+                setEditError(err instanceof Error ? err.message : 'Save failed');
+              }
+            }}>
+              <div className="modal-body space-y-3">
+                {editError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">{editError}</div>}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="field-label">Name *</label>
+                    <input className="input-field" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+                  </div>
+                  <div>
+                    <label className="field-label">Email *</label>
+                    <input type="email" className="input-field" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} required />
+                  </div>
+                  <div>
+                    <label className="field-label">Phone</label>
+                    <input className="input-field" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="field-label">Role *</label>
+                    <select className="input-field" value={editForm.roleId} onChange={(e) => setEditForm({ ...editForm, roleId: e.target.value })} required>
+                      {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" className="h-4 w-4" checked={editForm.isActive} onChange={(e) => setEditForm({ ...editForm, isActive: e.target.checked })} />
+                  Active (deactivated users cannot sign in)
+                </label>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="secondary-button" onClick={() => setEditTarget(null)}>Cancel</button>
+                <button type="submit" className="primary-button">Save Changes</button>
               </div>
             </form>
           </div>

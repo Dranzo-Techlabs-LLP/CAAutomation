@@ -87,6 +87,30 @@ export class UsersService {
     await this.userRepository.update({ id: userId }, { passwordHash });
   }
 
+  async updateUser(
+    userId: string,
+    firmId: string,
+    body: { name?: string; email?: string; phone?: string | null; roleId?: string; isActive?: boolean },
+    actorUserId: string,
+  ): Promise<UserResponseDto> {
+    const user = await this.userRepository.findOne({ where: { id: userId, firmId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (body.name !== undefined) user.name = body.name;
+    if (body.email !== undefined) {
+      const next = body.email.toLowerCase();
+      if (next !== user.email) {
+        const dup = await this.userRepository.findOne({ where: { email: next } });
+        if (dup && dup.id !== user.id) throw new ConflictException('Email already in use');
+        user.email = next;
+      }
+    }
+    if (body.phone !== undefined) user.phone = body.phone || null;
+    if (body.roleId !== undefined) user.roleId = body.roleId;
+    if (body.isActive !== undefined) user.isActive = body.isActive;
+    user.updatedBy = actorUserId;
+    return this.toResponse(await this.userRepository.save(user));
+  }
+
   async updateRates(
     userId: string,
     firmId: string,

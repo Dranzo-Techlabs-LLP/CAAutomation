@@ -8,6 +8,7 @@ import { RequestUser } from '../common/types/request-user';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { UsersService } from './users.service';
 
@@ -72,5 +73,15 @@ export class UsersController {
     @Body() body: { defaultHourlyRate?: string | null; costRate?: string | null },
   ): Promise<UserResponseDto> {
     return this.usersService.updateRates(id, user.firmId, body, user.id);
+  }
+
+  @Patch(':id')
+  @Permissions('user.create')
+  async updateUser(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
+    return this.usersService.updateUser(id, user.firmId, dto, user.id);
   }
 }
