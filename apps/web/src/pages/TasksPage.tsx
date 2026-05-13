@@ -19,11 +19,12 @@ interface Task {
   generatedBy: string;
   resolution?: string;
   createdAt?: string;
+  parentTaskId?: string | null;
 }
 interface Comment { id: string; userId: string; body: string; createdAt: string; }
 interface Attachment { id: string; fileName: string; fileUrl: string; mimeType: string; sizeBytes: string; tag: string; createdAt: string; uploadedByUserId: string; }
 interface TimeLogEntry { id: string; userId: string; startedAt: string; endedAt?: string; durationMinutes?: number; notes?: string; isBillable: boolean; }
-interface Subtask { id: string; title: string; description?: string | null; status: string; priority: string; assignedToUserId?: string | null; dueDate?: string | null; }
+interface Subtask { id: string; title: string; description?: string | null; status: string; priority: string; assignedToUserId?: string | null; dueDate?: string | null; estimatedHours?: string | null; customerId: string; generatedBy: string; parentTaskId?: string | null; createdAt?: string; }
 interface TaskStatusDef { id: string; code: string; label: string; color?: string | null; sortOrder: number; isInitial: boolean; isTerminal: boolean; isSystem: boolean; }
 interface AuditEntry { id: string; userId?: string | null; action: string; entityType: string; entityId: string; beforeJson?: Record<string, unknown> | null; afterJson?: Record<string, unknown> | null; createdAt: string; }
 
@@ -416,6 +417,14 @@ export default function TasksPage() {
             load();
           }}
           onClose={() => { setSelectedTask(null); load(); }}
+          onOpenTask={async (taskId) => {
+            try {
+              const t = await api<Task>(`/tasks/${taskId}`);
+              setSelectedTask(t);
+            } catch (err) {
+              alert(err instanceof Error ? err.message : 'Failed to open task');
+            }
+          }}
         />
       )}
 
@@ -463,20 +472,25 @@ export default function TasksPage() {
 /* ── Task Detail Panel (modal) ── */
 function TaskDetailPanel({
   task, customerMap, userMap, users, canEdit, canComment, canAttach, canLogTime, currentUserId,
-  onStatusChange, onResolutionChange, onUpdate, onDelete, onClose,
+  onStatusChange, onResolutionChange, onUpdate, onDelete, onClose, onOpenTask,
 }: {
   task: Task; customerMap: Record<string, string>; userMap: Record<string, string>;
   users: { id: string; name: string }[];
   canEdit: boolean; canComment: boolean; canAttach: boolean; canLogTime: boolean; currentUserId: string;
   onStatusChange: (s: string) => void; onResolutionChange: (r: string) => void;
   onUpdate: (fields: Record<string, unknown>) => Promise<void>; onDelete: () => Promise<void>; onClose: () => void;
+  onOpenTask: (taskId: string) => void;
 }) {
   const [tab, setTab] = useState<DetailTab>('details');
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
-  const [newSubtask, setNewSubtask] = useState({ title: '', assignedToUserId: '', dueDate: '' });
+  const [newSubtask, setNewSubtask] = useState({
+    title: '', description: '', priority: 'medium',
+    assignedToUserId: '', dueDate: '', estimatedHours: '',
+  });
+  const [showSubtaskForm, setShowSubtaskForm] = useState(false);
   const [history, setHistory] = useState<AuditEntry[]>([]);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [commentText, setCommentText] = useState('');
@@ -523,11 +537,15 @@ function TaskDetailPanel({
         method: 'POST',
         body: JSON.stringify({
           title: newSubtask.title,
+          description: newSubtask.description || undefined,
+          priority: newSubtask.priority || undefined,
+          estimatedHours: newSubtask.estimatedHours || undefined,
           assignedToUserId: newSubtask.assignedToUserId || undefined,
           dueDate: newSubtask.dueDate ? new Date(newSubtask.dueDate).toISOString() : undefined,
         }),
       });
-      setNewSubtask({ title: '', assignedToUserId: '', dueDate: '' });
+      setNewSubtask({ title: '', description: '', priority: 'medium', assignedToUserId: '', dueDate: '', estimatedHours: '' });
+      setShowSubtaskForm(false);
       loadSubtasks();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed');
@@ -652,6 +670,17 @@ function TaskDetailPanel({
         {/* Header */}
         <div className="flex items-start justify-between border-b border-border p-4">
           <div className="min-w-0 flex-1">
+            {task.parentTaskId && (
+              <button
+                type="button"
+                onClick={() => onOpenTask(task.parentTaskId!)}
+                className="mb-2 inline-flex items-center gap-1 rounded-md border border-border bg-accent/30 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                title="Open parent task"
+              >
+                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+                Subtask of parent
+              </button>
+            )}
             <div className="flex items-center gap-2">
               <span className={`inline-block h-2.5 w-2.5 rounded-full ${PRIORITY_DOT[task.priority] || ''}`} />
               <span className={`text-xs font-semibold uppercase ${PRIORITY_COLORS[task.priority] || ''}`}>{task.priority}</span>
@@ -890,17 +919,63 @@ function TaskDetailPanel({
               })()}
 
               {/* Add */}
-              {canEdit && (
-                <form onSubmit={addSubtask} className="rounded-lg border border-border bg-panel p-3 space-y-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Add Subtask</div>
-                  <div className="grid gap-2 sm:grid-cols-12">
-                    <input className="input-field sm:col-span-6" placeholder="Subtask title..." value={newSubtask.title} onChange={(e) => setNewSubtask({ ...newSubtask, title: e.target.value })} required />
-                    <select className="input-field sm:col-span-3" value={newSubtask.assignedToUserId} onChange={(e) => setNewSubtask({ ...newSubtask, assignedToUserId: e.target.value })}>
-                      <option value="">Unassigned</option>
-                      {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                    </select>
-                    <input type="date" className="input-field sm:col-span-2" value={newSubtask.dueDate} onChange={(e) => setNewSubtask({ ...newSubtask, dueDate: e.target.value })} />
-                    <button type="submit" className="primary-button text-xs sm:col-span-1">Add</button>
+              {canEdit && !showSubtaskForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowSubtaskForm(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-panel p-3 text-sm font-medium text-muted-foreground hover:border-primary hover:bg-accent/30 hover:text-foreground transition-colors"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+                  Add Subtask
+                </button>
+              )}
+              {canEdit && showSubtaskForm && (
+                <form onSubmit={addSubtask} className="rounded-lg border border-border bg-panel p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">New Subtask</div>
+                    <button type="button" onClick={() => setShowSubtaskForm(false)} className="text-[11px] text-muted-foreground hover:text-foreground">Cancel</button>
+                  </div>
+                  <input
+                    className="input-field w-full"
+                    placeholder="Subtask title *"
+                    value={newSubtask.title}
+                    onChange={(e) => setNewSubtask({ ...newSubtask, title: e.target.value })}
+                    required
+                    autoFocus
+                  />
+                  <textarea
+                    className="input-field w-full"
+                    rows={3}
+                    placeholder="Description (optional) — what needs to be done, context, links..."
+                    value={newSubtask.description}
+                    onChange={(e) => setNewSubtask({ ...newSubtask, description: e.target.value })}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Assignee</label>
+                      <select className="input-field w-full" value={newSubtask.assignedToUserId} onChange={(e) => setNewSubtask({ ...newSubtask, assignedToUserId: e.target.value })}>
+                        <option value="">Unassigned</option>
+                        {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Priority</label>
+                      <select className="input-field w-full capitalize" value={newSubtask.priority} onChange={(e) => setNewSubtask({ ...newSubtask, priority: e.target.value })}>
+                        {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Due Date</label>
+                      <input type="date" className="input-field w-full" value={newSubtask.dueDate} onChange={(e) => setNewSubtask({ ...newSubtask, dueDate: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Est. Hours</label>
+                      <input type="number" min="0" step="0.25" className="input-field w-full" placeholder="0.0" value={newSubtask.estimatedHours} onChange={(e) => setNewSubtask({ ...newSubtask, estimatedHours: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Attachments and comments can be added after creation — open the subtask to manage them.</span>
+                    <button type="submit" className="primary-button text-xs">Create Subtask</button>
                   </div>
                 </form>
               )}
@@ -925,8 +1000,15 @@ function TaskDetailPanel({
                           onChange={() => updateSubtaskStatus(s.id, done ? 'in_progress' : 'completed')}
                         />
                         <div className="min-w-0 flex-1">
-                          <div className={`text-sm font-medium ${done ? 'text-muted-foreground line-through' : 'text-foreground'}`}>{s.title}</div>
-                          {s.description && <p className="mt-0.5 text-[11.5px] text-muted-foreground whitespace-pre-wrap">{s.description}</p>}
+                          <button
+                            type="button"
+                            onClick={() => onOpenTask(s.id)}
+                            className={`block text-left text-sm font-medium hover:underline ${done ? 'text-muted-foreground line-through' : 'text-foreground hover:text-primary'}`}
+                            title="Open subtask — attachments, comments, time log, history"
+                          >
+                            {s.title}
+                          </button>
+                          {s.description && <p className="mt-0.5 line-clamp-2 text-[11.5px] text-muted-foreground whitespace-pre-wrap">{s.description}</p>}
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
                             <span className={`rounded px-1.5 py-0.5 font-semibold ${STATUS_COLORS[s.status] || 'bg-accent text-foreground'}`}>{s.status.replace(/_/g, ' ')}</span>
                             <span className={`rounded px-1.5 py-0.5 font-semibold capitalize ${PRIORITY_COLORS[s.priority] || ''} bg-accent`}>{s.priority}</span>
