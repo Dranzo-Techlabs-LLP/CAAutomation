@@ -663,7 +663,9 @@ function TaskDetailPanel({
         body: JSON.stringify({ orderedIds: next.map((s) => s.id) }),
       });
       loadSubtasks();
+      loadHistory();
     } catch (err) {
+      // Roll back optimistic state by reloading from the server once.
       alert(err instanceof Error ? err.message : 'Reorder failed');
       loadSubtasks();
     }
@@ -675,9 +677,11 @@ function TaskDetailPanel({
     if (!quickLogTarget) return;
     const hrs = parseInt(quickLogForm.hours || '0', 10);
     const mins = parseInt(quickLogForm.minutes || '0', 10);
+    if (Number.isNaN(hrs) || Number.isNaN(mins)) { alert('Hours/minutes must be numbers'); return; }
     if (hrs === 0 && mins === 0) { alert('Enter duration'); return; }
     const totalMinutes = hrs * 60 + mins;
     const start = new Date(quickLogForm.date + 'T09:00:00');
+    if (Number.isNaN(start.getTime())) { alert('Invalid date'); return; }
     const end = new Date(start.getTime() + totalMinutes * 60000);
     try {
       await api('/time-logs', {

@@ -77,11 +77,12 @@ export class TasksController {
   @Delete(':id')
   @Permissions('task.edit')
   async delete(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ deleted: boolean }> {
-    await this.tasksService.delete(user.firmId, id);
+    await this.tasksService.delete(user.firmId, id, user.id);
     return { deleted: true };
   }
 
   @Patch(':id/resolution')
+  @Permissions('task.edit')
   async updateResolution(
     @CurrentUser() user: RequestUser,
     @Param('id') id: string,

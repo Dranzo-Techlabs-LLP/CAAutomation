@@ -52,7 +52,7 @@ export class CustomersBulkService {
 
   async template(firmId: string): Promise<Buffer> {
     const firmUsers = await this.users.find({
-      where: { firmId },
+      where: { firmId, isActive: true },
       order: { email: 'ASC' },
     });
     const ownerEmails = firmUsers.map((u) => u.email).filter(Boolean);
@@ -108,8 +108,9 @@ export class CustomersBulkService {
     };
     const rows = await parseUpload<Row>({ buffer, columns: customerColumns({ ownerEmails: [] }) });
 
-    // Preload firm users keyed by lowercase email for owner lookup.
-    const firmUsers = await this.users.find({ where: { firmId } });
+    // Preload ACTIVE firm users only — keyed by lowercase email for owner lookup.
+    // Inactive users are excluded to avoid creating orphan ownership assignments.
+    const firmUsers = await this.users.find({ where: { firmId, isActive: true } });
     const userByEmail = new Map(firmUsers.map((u) => [u.email.toLowerCase(), u]));
 
     // Preload existing customers keyed by lowercase email for upsert match.

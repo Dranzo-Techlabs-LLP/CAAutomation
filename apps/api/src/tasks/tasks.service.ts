@@ -163,12 +163,12 @@ export class TasksService {
     return this.toResponse(saved);
   }
 
-  async delete(firmId: string, id: string): Promise<void> {
+  async delete(firmId: string, id: string, actorUserId: string): Promise<void> {
     const task = await this.getEntityOrFail(firmId, id);
     const before = this.snapshot(task);
     await this.taskRepository.delete({ firmId, parentTaskId: id });
     await this.taskRepository.remove(task);
-    await this.writeAudit('task.deleted', firmId, id, '', before, null);
+    await this.writeAudit('task.deleted', firmId, id, actorUserId, before, null);
   }
 
   async updateStatus(firmId: string, id: string, status: string, actorUserId: string): Promise<TaskResponseDto> {
@@ -234,14 +234,18 @@ export class TasksService {
       where: { firmId, parentTaskId: parentId },
     });
     const byId = new Map(subs.map((s) => [s.id, s]));
+    // Refuse if the payload references any subtask that doesn't belong to
+    // this parent — prevents silent no-ops that hide permission errors.
+    const foreign = orderedIds.find((id) => !byId.has(id));
+    if (foreign) {
+      throw new NotFoundException(`Subtask ${foreign} does not belong to parent ${parentId}`);
+    }
     const updates: Task[] = [];
     orderedIds.forEach((id, idx) => {
-      const sub = byId.get(id);
-      if (sub) {
-        sub.sortOrder = idx;
-        sub.updatedBy = actorUserId;
-        updates.push(sub);
-      }
+      const sub = byId.get(id)!;
+      sub.sortOrder = idx;
+      sub.updatedBy = actorUserId;
+      updates.push(sub);
     });
     if (updates.length) await this.taskRepository.save(updates);
     await this.writeAudit(

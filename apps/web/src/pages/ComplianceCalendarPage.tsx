@@ -19,10 +19,10 @@ type DateType = 'dueDate' | 'staffDueDate' | 'reviewDate' | 'clientDueDate';
 type ViewMode = 'client' | 'service' | 'staff';
 
 const DATE_TYPE_LABELS: Record<DateType, string> = {
-  dueDate: 'Due Date',
+  dueDate: 'Client Due Date',
   staffDueDate: 'Staff Due Date',
   reviewDate: 'Review Date',
-  clientDueDate: 'Client Due Date',
+  clientDueDate: 'Partner Due Date',
 };
 
 const DATE_TYPE_COLORS: Record<DateType, string> = {
@@ -42,6 +42,29 @@ const STATUS_COLORS: Record<string, string> = {
   review: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-200',
   completed: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200',
   cancelled: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
+};
+
+// Solid status colors used for the tiny dots inside each day-cell group
+// (the existing STATUS_COLORS values are background tints with text colour;
+// dots need a saturated single-colour swatch).
+const STATUS_DOT_COLORS: Record<string, string> = {
+  unassigned: 'bg-gray-400',
+  assigned: 'bg-blue-500',
+  in_progress: 'bg-yellow-500',
+  on_hold: 'bg-orange-500',
+  review: 'bg-purple-500',
+  completed: 'bg-green-500',
+  cancelled: 'bg-red-500',
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  unassigned: 'Unassigned',
+  assigned: 'Assigned',
+  in_progress: 'In Progress',
+  on_hold: 'On Hold',
+  review: 'Review',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
 };
 
 interface CalendarEntry {
@@ -345,16 +368,32 @@ export default function ComplianceCalendarPage() {
                     const entries = groups[gKey];
                     const label = getEntityLabel(gKey);
                     const overdue = hasOverdueInGroup(entries);
+                    // Deduplicate statuses present in this group to show as colour dots
+                    const uniqStatuses = Array.from(
+                      new Set(entries.map((e) => e.task.status)),
+                    );
+                    const statusTitle = uniqStatuses
+                      .map((s) => STATUS_LABELS[s] || s)
+                      .join(', ');
                     return (
                       <button
                         key={gKey}
                         onClick={() => setGroupModal({ day, groupId: gKey, groupLabel: label, entries })}
                         className={`group flex w-full items-center justify-between gap-1 rounded-md px-1.5 py-1 text-left text-[10.5px] font-medium ring-1 ring-inset transition-colors hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-primary ${overdue ? 'bg-red-50 text-red-800 ring-red-200 dark:bg-red-900/20 dark:text-red-200 dark:ring-red-800' : viewAccent[viewMode]}`}
-                        title={`${label} — ${entries.length} task${entries.length > 1 ? 's' : ''}`}
+                        title={`${label} — ${entries.length} task${entries.length > 1 ? 's' : ''} (${statusTitle})`}
                       >
                         <span className="truncate">{label}</span>
-                        <span className={`flex h-4 min-w-[16px] shrink-0 items-center justify-center rounded-full px-1 text-[9px] font-bold ${overdue ? 'bg-red-600 text-white' : 'bg-white/80 text-current dark:bg-black/30'}`}>
-                          {entries.length}
+                        <span className="flex shrink-0 items-center gap-0.5">
+                          {uniqStatuses.slice(0, 4).map((s) => (
+                            <span
+                              key={s}
+                              className={`inline-block h-1.5 w-1.5 rounded-full ${STATUS_DOT_COLORS[s] || 'bg-gray-300'}`}
+                              aria-label={STATUS_LABELS[s] || s}
+                            />
+                          ))}
+                          <span className={`ml-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-bold ${overdue ? 'bg-red-600 text-white' : 'bg-white/80 text-current dark:bg-black/30'}`}>
+                            {entries.length}
+                          </span>
                         </span>
                       </button>
                     );
@@ -378,13 +417,24 @@ export default function ComplianceCalendarPage() {
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap items-center gap-2 text-[11px]">
-        <span className="text-muted-foreground">Date types:</span>
-        {(Object.keys(DATE_TYPE_COLORS) as DateType[]).map((dt) => (
-          <span key={dt} className={`rounded px-2 py-0.5 ${DATE_TYPE_COLORS[dt]}`}>{DATE_TYPE_LABELS[dt]}</span>
-        ))}
-        <span className="rounded px-2 py-0.5 bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-200">Overdue</span>
+      {/* Legend — status dots + date type tints + overdue */}
+      <div className="space-y-1.5 rounded-md border border-border bg-panel/60 p-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-muted-foreground font-medium">Status:</span>
+          {TASK_STATUSES.map((s) => (
+            <span key={s} className="inline-flex items-center gap-1.5">
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${STATUS_DOT_COLORS[s] || 'bg-gray-300'}`} />
+              <span className="capitalize text-foreground">{STATUS_LABELS[s] || s}</span>
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted-foreground font-medium">Date types:</span>
+          {(Object.keys(DATE_TYPE_COLORS) as DateType[]).map((dt) => (
+            <span key={dt} className={`rounded px-2 py-0.5 ${DATE_TYPE_COLORS[dt]}`}>{DATE_TYPE_LABELS[dt]}</span>
+          ))}
+          <span className="rounded px-2 py-0.5 bg-red-200 text-red-900 dark:bg-red-900/40 dark:text-red-200">Overdue</span>
+        </div>
       </div>
 
       {/* Group Modal: tasks for entity on a specific day */}

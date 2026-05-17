@@ -106,7 +106,9 @@ export async function buildTemplate(opts: {
       }
     } else if (c.enumValues?.length) {
       // Inline list — Excel hard-limits this to 255 chars including commas + quotes.
-      const inline = c.enumValues.join(',');
+      // Escape double-quotes inside values (Excel formula uses "" to escape ").
+      const safe = c.enumValues.map((v) => String(v).replace(/"/g, '""'));
+      const inline = safe.join(',');
       if (inline.length <= 250) {
         formula = `"${inline}"`;
         errorMsg = `Allowed: ${c.enumValues.join(', ')}`;
