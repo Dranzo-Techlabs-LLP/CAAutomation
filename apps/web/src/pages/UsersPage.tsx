@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
-import { api } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { Download, FileUp, Upload, X } from 'lucide-react';
+import { api, apiDownload, apiUpload } from '../lib/api';
 import { useAuth } from '../lib/auth';
+
+interface BulkResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: { row: number; reason: string; data?: Record<string, unknown> }[];
+}
 
 interface UserItem {
   id: string;
@@ -39,6 +46,9 @@ export default function UsersPage() {
   const [allPermissions, setAllPermissions] = useState<PermissionItem[]>([]);
   const [tab, setTab] = useState<'users' | 'roles'>('users');
   const [showUserForm, setShowUserForm] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState<'' | 'template' | 'export' | 'import'>('');
+  const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [editingRole, setEditingRole] = useState<string | null>(null);
   const [selectedPermIds, setSelectedPermIds] = useState<string[]>([]);
   const [userForm, setUserForm] = useState({ name: '', email: '', password: '', roleId: '', phone: '', defaultHourlyRate: '', costRate: '' });
@@ -61,6 +71,37 @@ export default function UsersPage() {
     loadRoles();
     api<PermissionItem[]>('/permissions').then(setAllPermissions).catch(() => {});
   }, []);
+
+  const handleDownloadTemplate = async () => {
+    setBulkBusy('template');
+    try { await apiDownload('/users/bulk/template', 'users-template.xlsx'); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Template download failed'); }
+    finally { setBulkBusy(''); }
+  };
+
+  const handleExport = async () => {
+    setBulkBusy('export');
+    try { await apiDownload('/users/bulk/export', 'users.xlsx'); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Export failed'); }
+    finally { setBulkBusy(''); }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkBusy('import');
+    setBulkResult(null);
+    try {
+      const res = await apiUpload<BulkResult>('/users/bulk/import', file);
+      setBulkResult(res);
+      loadUsers();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setBulkBusy('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -137,14 +178,77 @@ export default function UsersPage() {
 
       {tab === 'users' && (
         <>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">Users</h2>
             {canCreateUser && (
-              <button className="primary-button" onClick={() => setShowUserForm(!showUserForm)}>
-                {showUserForm ? 'Cancel' : 'Add User'}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={!!bulkBusy}
+                  onClick={handleDownloadTemplate}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                  title="Download blank Excel template"
+                >
+                  <FileUp className="h-3.5 w-3.5" />
+                  {bulkBusy === 'template' ? 'Preparing…' : 'Template'}
+                </button>
+                <button
+                  type="button"
+                  disabled={!!bulkBusy}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                  title="Upload filled .xlsx to import"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {bulkBusy === 'import' ? 'Importing…' : 'Import'}
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={handleImportFile}
+                />
+                <button
+                  type="button"
+                  disabled={!!bulkBusy}
+                  onClick={handleExport}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+                  title="Download all users as Excel"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {bulkBusy === 'export' ? 'Exporting…' : 'Export'}
+                </button>
+                <button className="primary-button" onClick={() => setShowUserForm(!showUserForm)}>
+                  {showUserForm ? 'Cancel' : 'Add User'}
+                </button>
+              </div>
             )}
           </div>
+
+          {bulkResult && (
+            <div className="rounded-md border border-border bg-panel p-3 text-sm">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="font-semibold">
+                  Import complete — <span className="text-emerald-600">{bulkResult.inserted} new</span>, <span className="text-blue-600">{bulkResult.updated} updated</span>, <span className="text-amber-600">{bulkResult.skipped} skipped</span>
+                </span>
+                <button onClick={() => setBulkResult(null)} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+              </div>
+              {bulkResult.errors.length > 0 && (
+                <ul className="mt-2 max-h-40 space-y-0.5 overflow-y-auto rounded border border-border bg-accent/20 p-2 text-xs">
+                  {bulkResult.errors.slice(0, 50).map((e, i) => (
+                    <li key={i}>
+                      <span className="font-mono text-amber-700">row {e.row}:</span> {e.reason}
+                      {e.data?.email ? ` (${String(e.data.email)})` : e.data?.name ? ` (${String(e.data.name)})` : ''}
+                    </li>
+                  ))}
+                  {bulkResult.errors.length > 50 && (
+                    <li className="italic text-muted-foreground">… {bulkResult.errors.length - 50} more</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
 
           {showUserForm && (
             <form onSubmit={handleCreateUser} className="panel space-y-3">

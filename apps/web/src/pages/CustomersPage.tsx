@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
-import { api } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { Download, FileUp, Pencil, Trash2, Upload } from 'lucide-react';
+import { api, apiDownload, apiUpload } from '../lib/api';
 
 interface Customer {
   id: string;
@@ -20,6 +20,12 @@ interface Customer {
 
 interface UserMini { id: string; name: string }
 interface TeamMini { id: string; name: string }
+interface BulkResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  errors: { row: number; reason: string; data?: Record<string, unknown> }[];
+}
 
 const TYPES = ['individual', 'company', 'llp', 'partnership', 'trust'];
 const SOURCES = ['call', 'whatsapp', 'walkin', 'email', 'referral'];
@@ -54,6 +60,9 @@ export default function CustomersPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [error, setError] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState<'' | 'template' | 'export' | 'import'>('');
+  const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = () => api<Customer[]>('/customers').then(setCustomers).catch(() => {});
   useEffect(() => {
@@ -142,6 +151,37 @@ export default function CustomersPage() {
     }
   };
 
+  const handleDownloadTemplate = async () => {
+    setBulkBusy('template');
+    try { await apiDownload('/customers/bulk/template', 'customers-template.xlsx'); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Template download failed'); }
+    finally { setBulkBusy(''); }
+  };
+
+  const handleExport = async () => {
+    setBulkBusy('export');
+    try { await apiDownload('/customers/bulk/export', 'customers.xlsx'); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Export failed'); }
+    finally { setBulkBusy(''); }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBulkBusy('import');
+    setBulkResult(null);
+    try {
+      const res = await apiUpload<BulkResult>('/customers/bulk/import', file);
+      setBulkResult(res);
+      load();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setBulkBusy('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       await api(`/customers/${id}`, { method: 'DELETE' });
@@ -157,20 +197,83 @@ export default function CustomersPage() {
     <section className="space-y-4 p-4 lg:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Customers</h2>
-        <button
-          className="primary-button text-sm"
-          onClick={() => {
-            if (editingCustomer) {
-              resetForm();
-            } else {
-              setShowForm(!showForm);
-              setEditingCustomer(null);
-            }
-          }}
-        >
-          {showForm || editingCustomer ? 'Cancel' : 'Add Customer'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={!!bulkBusy}
+            onClick={handleDownloadTemplate}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+            title="Download blank Excel template"
+          >
+            <FileUp className="h-3.5 w-3.5" />
+            {bulkBusy === 'template' ? 'Preparing…' : 'Template'}
+          </button>
+          <button
+            type="button"
+            disabled={!!bulkBusy}
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+            title="Upload .xlsx to import"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {bulkBusy === 'import' ? 'Importing…' : 'Import'}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          <button
+            type="button"
+            disabled={!!bulkBusy}
+            onClick={handleExport}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent disabled:opacity-50"
+            title="Download all customers as Excel"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {bulkBusy === 'export' ? 'Exporting…' : 'Export'}
+          </button>
+          <button
+            className="primary-button text-sm"
+            onClick={() => {
+              if (editingCustomer) {
+                resetForm();
+              } else {
+                setShowForm(!showForm);
+                setEditingCustomer(null);
+              }
+            }}
+          >
+            {showForm || editingCustomer ? 'Cancel' : 'Add Customer'}
+          </button>
+        </div>
       </div>
+
+      {bulkResult && (
+        <div className="rounded-md border border-border bg-panel p-3 text-sm">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="font-semibold">
+              Import complete — <span className="text-emerald-600">{bulkResult.inserted} new</span>, <span className="text-blue-600">{bulkResult.updated} updated</span>, <span className="text-amber-600">{bulkResult.skipped} skipped</span>
+            </span>
+            <button onClick={() => setBulkResult(null)} className="text-xs text-muted-foreground hover:text-foreground">Dismiss</button>
+          </div>
+          {bulkResult.errors.length > 0 && (
+            <ul className="mt-2 max-h-40 space-y-0.5 overflow-y-auto rounded border border-border bg-accent/20 p-2 text-xs">
+              {bulkResult.errors.slice(0, 50).map((e, i) => (
+                <li key={i}>
+                  <span className="font-mono text-amber-700">row {e.row}:</span> {e.reason}
+                  {e.data?.name ? ` (${String(e.data.name)})` : ''}
+                </li>
+              ))}
+              {bulkResult.errors.length > 50 && (
+                <li className="italic text-muted-foreground">… {bulkResult.errors.length - 50} more</li>
+              )}
+            </ul>
+          )}
+        </div>
+      )}
 
       {(showForm || editingCustomer) && (
         <form onSubmit={editingCustomer ? handleUpdate : handleCreate} className="panel space-y-3">

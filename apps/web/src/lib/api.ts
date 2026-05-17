@@ -70,3 +70,67 @@ export async function api<T = unknown>(
   if (res.status === 204) return undefined as T;
   return res.json();
 }
+
+/** Download a binary file from the API and trigger a browser save dialog. */
+export async function apiDownload(path: string, fallbackName = 'download.bin'): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  let res = await fetch(`${BASE}${path}`, { headers });
+  if (res.status === 401 && accessToken) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+      res = await fetch(`${BASE}${path}`, { headers });
+    } else {
+      clearTokens();
+      window.location.href = '/login';
+      throw new Error('Session expired');
+    }
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Download failed: ${res.status}`);
+  }
+  const blob = await res.blob();
+  // Prefer Content-Disposition filename; fall back to caller-provided name.
+  const disp = res.headers.get('Content-Disposition') || '';
+  const match = /filename\s*=\s*"?([^";]+)"?/i.exec(disp);
+  const filename = match?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Upload a single file via multipart/form-data and return JSON response. */
+export async function apiUpload<T = unknown>(
+  path: string,
+  file: File,
+  fieldName = 'file',
+): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+  const form = new FormData();
+  form.append(fieldName, file);
+  let res = await fetch(`${BASE}${path}`, { method: 'POST', body: form, headers });
+  if (res.status === 401 && accessToken) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+      res = await fetch(`${BASE}${path}`, { method: 'POST', body: form, headers });
+    } else {
+      clearTokens();
+      window.location.href = '/login';
+      throw new Error('Session expired');
+    }
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}

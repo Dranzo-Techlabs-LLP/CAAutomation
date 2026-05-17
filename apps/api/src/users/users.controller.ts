@@ -1,5 +1,19 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Res,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -10,14 +24,52 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { UsersBulkService } from './users.bulk';
 import { UsersService } from './users.service';
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 @ApiTags('Users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly bulk: UsersBulkService,
+  ) {}
+
+  // ── Bulk operations (declared BEFORE :id catch-all so paths match correctly)
+  @Get('bulk/template')
+  @Permissions('user.create')
+  async downloadTemplate(@Res() res: Response): Promise<void> {
+    const buf = await this.bulk.template();
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Disposition', 'attachment; filename="users-template.xlsx"');
+    res.send(buf);
+  }
+
+  @Get('bulk/export')
+  @Permissions('user.view')
+  async exportData(@CurrentUser() user: RequestUser, @Res() res: Response): Promise<void> {
+    const buf = await this.bulk.export(user.firmId);
+    res.setHeader('Content-Type', XLSX_MIME);
+    res.setHeader('Content-Disposition', `attachment; filename="users-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    res.send(buf);
+  }
+
+  @Post('bulk/import')
+  @Permissions('user.create')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  async importData(
+    @CurrentUser() user: RequestUser,
+    @UploadedFile() file: { buffer: Buffer; mimetype?: string; originalname?: string } | undefined,
+  ) {
+    if (!file || !file.buffer) {
+      throw new BadRequestException('File is required (form field name: file)');
+    }
+    return this.bulk.import(user.firmId, user.id, file.buffer);
+  }
 
   @Get('me')
   async me(@CurrentUser() user: RequestUser): Promise<UserResponseDto> {

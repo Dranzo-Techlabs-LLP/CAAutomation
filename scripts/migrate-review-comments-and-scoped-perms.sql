@@ -12,21 +12,41 @@ SET @sql := IF(@col_exists = 0,
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
--- 2. Insert new scoped permissions (admin/manager grant these; others get filtered views)
+-- 2. Insert missing permissions referenced by controllers but never seeded.
+--    customer.edit + customer.delete were referenced in CustomersController but
+--    not present in the permissions table, so every customer update returned 403.
 INSERT IGNORE INTO permissions (id, code, description, module, created_at, updated_at)
 VALUES
-  (UUID(), 'task.view_all',     'View all firm tasks (otherwise scoped to own assignments)', 'tasks',     NOW(6), NOW(6)),
-  (UUID(), 'calendar.view_all', 'View firm-wide compliance calendar (otherwise own only)',    'dashboard', NOW(6), NOW(6)),
-  (UUID(), 'report.view_all',   'View firm-wide analytics & revenue (otherwise own only)',    'reports',   NOW(6), NOW(6));
+  (UUID(), 'customer.edit',     'Edit existing customers',                                     'customers', NOW(6), NOW(6)),
+  (UUID(), 'customer.delete',   'Delete customers',                                            'customers', NOW(6), NOW(6)),
+  (UUID(), 'task.view_all',     'View all firm tasks (otherwise scoped to own assignments)',   'tasks',     NOW(6), NOW(6)),
+  (UUID(), 'calendar.view_all', 'View firm-wide compliance calendar (otherwise own only)',     'dashboard', NOW(6), NOW(6)),
+  (UUID(), 'report.view_all',   'View firm-wide analytics & revenue (otherwise own only)',     'reports',   NOW(6), NOW(6));
 
--- 3. Grant the new permissions to every existing Administrator-style role
---    (any role whose name contains 'admin' or 'manager', case-insensitive).
+-- 3a. Grant scoped-view permissions to admin/manager/partner roles.
 INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at)
 SELECT r.id, p.id, NOW(6), NOW(6)
 FROM roles r
 CROSS JOIN permissions p
 WHERE p.code IN ('task.view_all', 'calendar.view_all', 'report.view_all')
-  AND (r.name LIKE '%dmin%' OR r.name LIKE '%anager%' OR r.is_system_role = 1);
+  AND (r.name LIKE '%dmin%' OR r.name LIKE '%anager%' OR r.name LIKE '%artner%' OR r.is_system_role = 1);
+
+-- 3b. Grant customer.edit + customer.delete to Admin / Partner / Manager (and
+--     any existing role that already has customer.create — that role clearly
+--     needed full customer rights but never got them seeded).
+INSERT IGNORE INTO role_permissions (role_id, permission_id, created_at, updated_at)
+SELECT DISTINCT r.id, p.id, NOW(6), NOW(6)
+FROM roles r
+CROSS JOIN permissions p
+WHERE p.code IN ('customer.edit', 'customer.delete')
+  AND (
+    r.name LIKE '%dmin%' OR r.name LIKE '%anager%' OR r.name LIKE '%artner%'
+    OR r.id IN (
+      SELECT rp.role_id FROM role_permissions rp
+      JOIN permissions pp ON pp.id = rp.permission_id
+      WHERE pp.code = 'customer.create'
+    )
+  );
 
 SELECT
   (SELECT COUNT(*) FROM permissions WHERE code IN ('task.view_all','calendar.view_all','report.view_all')) AS new_perms,
