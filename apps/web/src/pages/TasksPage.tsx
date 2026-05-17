@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
 
@@ -32,6 +33,53 @@ interface AuditEntry { id: string; userId?: string | null; action: string; entit
 /* ── Constants ── */
 const STATUSES = ['unassigned', 'assigned', 'in_progress', 'on_hold', 'review', 'completed', 'cancelled'];
 const PRIORITIES = ['low', 'medium', 'high', 'urgent'];
+
+/* ── Field visibility (per-user, localStorage) ──
+ * `title` and `customerId` are required and always visible.
+ * Everything else is toggleable from the gear menu on the Tasks page. */
+type FieldKey =
+  | 'serviceId' | 'priority' | 'assignedToUserId' | 'assignedTeamId'
+  | 'dueDate' | 'staffDueDate' | 'reviewDate' | 'clientDueDate'
+  | 'description' | 'resolution' | 'reviewComments';
+
+const FIELD_LABELS: Record<FieldKey, string> = {
+  serviceId:         'Service',
+  priority:          'Priority',
+  assignedToUserId:  'Assign to User',
+  assignedTeamId:    'Assign to Team',
+  dueDate:           'Client Due Date',
+  staffDueDate:      'Staff Due Date',
+  reviewDate:        'Review Date',
+  clientDueDate:     'Partner Due Date',
+  description:       'Description',
+  resolution:        'Resolution',
+  reviewComments:    'Review Comments',
+};
+
+const FIELD_ORDER: FieldKey[] = [
+  'serviceId', 'priority', 'assignedToUserId', 'assignedTeamId',
+  'dueDate', 'staffDueDate', 'reviewDate', 'clientDueDate',
+  'description', 'resolution', 'reviewComments',
+];
+
+const DEFAULT_VISIBLE: Record<FieldKey, boolean> = FIELD_ORDER.reduce((acc, k) => {
+  acc[k] = true; return acc;
+}, {} as Record<FieldKey, boolean>);
+
+const VIS_STORAGE_KEY = 'task_form_visible_fields';
+
+function loadVisible(): Record<FieldKey, boolean> {
+  try {
+    const raw = localStorage.getItem(VIS_STORAGE_KEY);
+    if (!raw) return DEFAULT_VISIBLE;
+    const parsed = JSON.parse(raw) as Partial<Record<FieldKey, boolean>>;
+    return { ...DEFAULT_VISIBLE, ...parsed };
+  } catch { return DEFAULT_VISIBLE; }
+}
+
+function saveVisible(v: Record<FieldKey, boolean>): void {
+  try { localStorage.setItem(VIS_STORAGE_KEY, JSON.stringify(v)); } catch { /* ignore */ }
+}
 
 const STATUS_COLORS: Record<string, string> = {
   unassigned: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
@@ -109,6 +157,15 @@ export default function TasksPage() {
   const [logTimeFor, setLogTimeFor] = useState<{ task: Task; targetStatus: string } | null>(null);
   const [logTimeForm, setLogTimeForm] = useState({ hours: '', minutes: '', notes: '' });
   const [showForm, setShowForm] = useState(false);
+  const [visible, setVisible] = useState<Record<FieldKey, boolean>>(() => loadVisible());
+  const [showFieldSettings, setShowFieldSettings] = useState(false);
+  const toggleField = (k: FieldKey) => {
+    setVisible((prev) => {
+      const next = { ...prev, [k]: !prev[k] };
+      saveVisible(next);
+      return next;
+    });
+  };
   const [filter, setFilter] = useState('all');
   const [filterCustomer, setFilterCustomer] = useState('');
   const [filterUser, setFilterUser] = useState('');
@@ -269,9 +326,59 @@ export default function TasksPage() {
             <button className={`px-3 py-1.5 text-xs ${viewMode === 'kanban' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-accent'} rounded-l-md`} onClick={() => setViewMode('kanban')}>Board</button>
             <button className={`px-3 py-1.5 text-xs ${viewMode === 'list' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-accent'} rounded-r-md`} onClick={() => setViewMode('list')}>List</button>
           </div>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-panel px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            onClick={() => setShowFieldSettings(true)}
+            title="Toggle which fields appear on the task form"
+          >
+            <SettingsIcon className="h-3.5 w-3.5" />
+            Fields
+          </button>
           {canCreate && <button className="primary-button text-sm" onClick={() => showForm ? resetForm() : setShowForm(true)}>{showForm ? 'Cancel' : '+ New Task'}</button>}
         </div>
       </div>
+
+      {/* Field Visibility Modal */}
+      {showFieldSettings && (
+        <div className="modal-overlay" onClick={() => setShowFieldSettings(false)}>
+          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <h3 className="modal-title">Task Form Fields</h3>
+                <p className="modal-subtitle">Hide fields you don't use. Settings save automatically for this browser.</p>
+              </div>
+              <button onClick={() => setShowFieldSettings(false)} className="rounded p-1 text-muted-foreground hover:bg-accent">
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="space-y-1 px-4 py-3 text-sm">
+              <p className="mb-2 text-[11.5px] text-muted-foreground">Title and Customer are always required and visible.</p>
+              {FIELD_ORDER.map((k) => (
+                <label key={k} className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-border bg-panel px-3 py-2 hover:bg-accent/40">
+                  <span className="font-medium">{FIELD_LABELS[k]}</span>
+                  <input
+                    type="checkbox"
+                    checked={visible[k]}
+                    onChange={() => toggleField(k)}
+                    className="h-4 w-4 cursor-pointer accent-current"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => { setVisible(DEFAULT_VISIBLE); saveVisible(DEFAULT_VISIBLE); }}
+              >
+                Reset to defaults
+              </button>
+              <button className="primary-button" onClick={() => setShowFieldSettings(false)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -301,18 +408,18 @@ export default function TasksPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Title *</label><input className="input-field" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required /></div>
             <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Customer *</label><select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required><option value="">Select...</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Service</label><select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}><option value="">None</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label><select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}</select></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to User</label><select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to Team</label><select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}><option value="">None</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Due Date</label><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label><input type="date" className="input-field" value={form.staffDueDate} onChange={(e) => setForm({ ...form, staffDueDate: e.target.value })} /></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Date</label><input type="date" className="input-field" value={form.reviewDate} onChange={(e) => setForm({ ...form, reviewDate: e.target.value })} /></div>
-            <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client Due Date</label><input type="date" className="input-field" value={form.clientDueDate} onChange={(e) => setForm({ ...form, clientDueDate: e.target.value })} /></div>
+            {visible.serviceId && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Service</label><select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}><option value="">None</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
+            {visible.priority && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label><select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}</select></div>}
+            {visible.assignedToUserId && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to User</label><select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>}
+            {visible.assignedTeamId && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to Team</label><select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}><option value="">None</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>}
+            {visible.dueDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client Due Date</label><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>}
+            {visible.staffDueDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label><input type="date" className="input-field" value={form.staffDueDate} onChange={(e) => setForm({ ...form, staffDueDate: e.target.value })} /></div>}
+            {visible.reviewDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Date</label><input type="date" className="input-field" value={form.reviewDate} onChange={(e) => setForm({ ...form, reviewDate: e.target.value })} /></div>}
+            {visible.clientDueDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Partner Due Date</label><input type="date" className="input-field" value={form.clientDueDate} onChange={(e) => setForm({ ...form, clientDueDate: e.target.value })} /></div>}
           </div>
-          <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
-          <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>
-          <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Comments</label><textarea className="input-field" rows={2} value={form.reviewComments} onChange={(e) => setForm({ ...form, reviewComments: e.target.value })} placeholder="Reviewer notes / feedback (optional)" /></div>
+          {visible.description && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>}
+          {visible.resolution && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>}
+          {visible.reviewComments && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Comments</label><textarea className="input-field" rows={2} value={form.reviewComments} onChange={(e) => setForm({ ...form, reviewComments: e.target.value })} placeholder="Reviewer notes / feedback (optional)" /></div>}
           <button type="submit" className="primary-button">Create Task</button>
         </form>
       )}
@@ -402,6 +509,7 @@ export default function TasksPage() {
           customerMap={customerMap}
           userMap={userMap}
           users={users}
+          visible={visible}
           canEdit={canEdit}
           canComment={canComment}
           canAttach={canAttach}
@@ -474,11 +582,12 @@ export default function TasksPage() {
 
 /* ── Task Detail Panel (modal) ── */
 function TaskDetailPanel({
-  task, customerMap, userMap, users, canEdit, canComment, canAttach, canLogTime, currentUserId,
+  task, customerMap, userMap, users, visible, canEdit, canComment, canAttach, canLogTime, currentUserId,
   onStatusChange, onResolutionChange, onUpdate, onDelete, onClose, onOpenTask,
 }: {
   task: Task; customerMap: Record<string, string>; userMap: Record<string, string>;
   users: { id: string; name: string }[];
+  visible: Record<FieldKey, boolean>;
   canEdit: boolean; canComment: boolean; canAttach: boolean; canLogTime: boolean; currentUserId: string;
   onStatusChange: (s: string) => void; onResolutionChange: (r: string) => void;
   onUpdate: (fields: Record<string, unknown>) => Promise<void>; onDelete: () => Promise<void>; onClose: () => void;
@@ -748,50 +857,66 @@ function TaskDetailPanel({
                     <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Title</label>
                     <input className="input-field" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
                   </div>
-                  <div>
-                    <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label>
-                    <textarea className="input-field" rows={3} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Comments</label>
-                    <textarea className="input-field" rows={3} value={editForm.reviewComments} onChange={(e) => setEditForm({ ...editForm, reviewComments: e.target.value })} placeholder="Reviewer notes / feedback" />
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  {visible.description && (
                     <div>
-                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label>
-                      <select className="input-field" value={editForm.priority} onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}>
-                        {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
-                      </select>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label>
+                      <textarea className="input-field" rows={3} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
                     </div>
+                  )}
+                  {visible.reviewComments && (
+                    <div>
+                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Comments</label>
+                      <textarea className="input-field" rows={3} value={editForm.reviewComments} onChange={(e) => setEditForm({ ...editForm, reviewComments: e.target.value })} placeholder="Reviewer notes / feedback" />
+                    </div>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {visible.priority && (
+                      <div>
+                        <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label>
+                        <select className="input-field" value={editForm.priority} onChange={(e) => setEditForm({ ...editForm, priority: e.target.value })}>
+                          {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                        </select>
+                      </div>
+                    )}
                     <div>
                       <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Status</label>
                       <select className="input-field" value={task.status} onChange={(e) => onStatusChange(e.target.value)}>
                         {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                       </select>
                     </div>
-                    <div>
-                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign To</label>
-                      <select className="input-field" value={editForm.assignedToUserId} onChange={(e) => setEditForm({ ...editForm, assignedToUserId: e.target.value })}>
-                        <option value="">Unassigned</option>
-                        {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Due Date</label>
-                      <input type="date" className="input-field" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label>
-                      <input type="date" className="input-field" value={editForm.staffDueDate} onChange={(e) => setEditForm({ ...editForm, staffDueDate: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Date</label>
-                      <input type="date" className="input-field" value={editForm.reviewDate} onChange={(e) => setEditForm({ ...editForm, reviewDate: e.target.value })} />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client Due Date</label>
-                      <input type="date" className="input-field" value={editForm.clientDueDate} onChange={(e) => setEditForm({ ...editForm, clientDueDate: e.target.value })} />
-                    </div>
+                    {visible.assignedToUserId && (
+                      <div>
+                        <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign To</label>
+                        <select className="input-field" value={editForm.assignedToUserId} onChange={(e) => setEditForm({ ...editForm, assignedToUserId: e.target.value })}>
+                          <option value="">Unassigned</option>
+                          {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {visible.dueDate && (
+                      <div>
+                        <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client Due Date</label>
+                        <input type="date" className="input-field" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} />
+                      </div>
+                    )}
+                    {visible.staffDueDate && (
+                      <div>
+                        <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label>
+                        <input type="date" className="input-field" value={editForm.staffDueDate} onChange={(e) => setEditForm({ ...editForm, staffDueDate: e.target.value })} />
+                      </div>
+                    )}
+                    {visible.reviewDate && (
+                      <div>
+                        <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Date</label>
+                        <input type="date" className="input-field" value={editForm.reviewDate} onChange={(e) => setEditForm({ ...editForm, reviewDate: e.target.value })} />
+                      </div>
+                    )}
+                    {visible.clientDueDate && (
+                      <div>
+                        <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Partner Due Date</label>
+                        <input type="date" className="input-field" value={editForm.clientDueDate} onChange={(e) => setEditForm({ ...editForm, clientDueDate: e.target.value })} />
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2 pt-1">
                     <button className="primary-button text-xs" onClick={async () => {
@@ -884,7 +1009,7 @@ function TaskDetailPanel({
                     </div>
                     {task.dueDate && (
                       <div className="rounded-md border border-border p-2.5">
-                        <span className="text-[13px] font-medium text-muted-foreground">Due Date</span>
+                        <span className="text-[13px] font-medium text-muted-foreground">Client Due Date</span>
                         <p className={`mt-0.5 font-medium ${new Date(task.dueDate) < new Date() && task.status !== 'completed' ? 'text-red-600' : ''}`}>
                           {new Date(task.dueDate).toLocaleDateString('en-IN')}
                         </p>
@@ -908,7 +1033,7 @@ function TaskDetailPanel({
                     )}
                     {task.clientDueDate && (
                       <div className="rounded-md border border-border p-2.5">
-                        <span className="text-[13px] font-medium text-muted-foreground">Client Due Date</span>
+                        <span className="text-[13px] font-medium text-muted-foreground">Partner Due Date</span>
                         <p className={`mt-0.5 font-medium ${new Date(task.clientDueDate) < new Date() && task.status !== 'completed' ? 'text-red-600' : ''}`}>
                           {new Date(task.clientDueDate).toLocaleDateString('en-IN')}
                         </p>
@@ -987,7 +1112,7 @@ function TaskDetailPanel({
                       </select>
                     </div>
                     <div>
-                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Due Date</label>
+                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Client Due Date</label>
                       <input type="date" className="input-field w-full" value={newSubtask.dueDate} onChange={(e) => setNewSubtask({ ...newSubtask, dueDate: e.target.value })} />
                     </div>
                     <div>

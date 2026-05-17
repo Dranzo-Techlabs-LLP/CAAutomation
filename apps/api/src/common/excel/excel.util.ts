@@ -6,8 +6,20 @@ export interface ColumnSpec {
   width?: number;
   required?: boolean;
   enumValues?: string[];
+  /**
+   * Name of a lookup sheet (created via `lookupSheets`) — used when the value
+   * list is too long for inline (>255 chars) or when callers want a
+   * reusable shared list. Resolves to data-validation against the sheet's
+   * column A range.
+   */
+  lookupSheet?: string;
   example?: string | number | boolean;
   note?: string;
+}
+
+export interface LookupSheet {
+  name: string;
+  values: string[];
 }
 
 const HEADER_FILL: ExcelJS.FillPattern = {
@@ -26,10 +38,29 @@ export async function buildTemplate(opts: {
   sheetName: string;
   columns: ColumnSpec[];
   instructions?: string[];
+  /** Optional hidden lookup sheets referenced by ColumnSpec.lookupSheet. */
+  lookupSheets?: LookupSheet[];
 }): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'DeskHub';
   wb.created = new Date();
+
+  // ── Hidden lookup sheets (created FIRST so column refs resolve) ──────
+  const lookupRefs = new Map<string, { sheetName: string; rangeRef: string }>();
+  if (opts.lookupSheets?.length) {
+    for (const lookup of opts.lookupSheets) {
+      const safe = lookup.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 24);
+      const sheetName = `_lk_${safe}`;
+      const lk = wb.addWorksheet(sheetName, { state: 'veryHidden' });
+      lookup.values.forEach((v, i) => lk.getCell(i + 1, 1).value = v);
+      const lastRow = Math.max(1, lookup.values.length);
+      // Cross-sheet refs need quoting if sheet name has odd chars; ours is safe.
+      lookupRefs.set(lookup.name, {
+        sheetName,
+        rangeRef: `${sheetName}!$A$1:$A$${lastRow}`,
+      });
+    }
+  }
 
   const ws = wb.addWorksheet(opts.sheetName);
 
@@ -63,21 +94,43 @@ export async function buildTemplate(opts: {
     ws.getRow(2).fill = REQUIRED_FILL;
   }
 
-  // Data validation for enum columns
+  // Data validation for enum / lookup columns
   opts.columns.forEach((c, i) => {
-    if (c.enumValues?.length) {
-      ws.getColumn(i + 1).eachCell({ includeEmpty: false }, () => {});
-      // Apply list validation to rows 2..1000
-      for (let r = 2; r <= 1000; r += 1) {
-        ws.getCell(r, i + 1).dataValidation = {
-          type: 'list',
-          allowBlank: !c.required,
-          formulae: [`"${c.enumValues.join(',')}"`],
-          showErrorMessage: true,
-          errorTitle: 'Invalid value',
-          error: `Allowed: ${c.enumValues.join(', ')}`,
-        };
+    let formula: string | null = null;
+    let errorMsg: string | null = null;
+    if (c.lookupSheet) {
+      const ref = lookupRefs.get(c.lookupSheet);
+      if (ref) {
+        formula = `=${ref.rangeRef}`;
+        errorMsg = `Pick a value from the ${c.lookupSheet} list`;
       }
+    } else if (c.enumValues?.length) {
+      // Inline list — Excel hard-limits this to 255 chars including commas + quotes.
+      const inline = c.enumValues.join(',');
+      if (inline.length <= 250) {
+        formula = `"${inline}"`;
+        errorMsg = `Allowed: ${c.enumValues.join(', ')}`;
+      } else {
+        // Fall back to an ad-hoc hidden sheet for large enums.
+        const safe = c.key.replace(/[^A-Za-z0-9]/g, '_').slice(0, 24);
+        const sheetName = `_lk_${safe}`;
+        const lk = wb.addWorksheet(sheetName, { state: 'veryHidden' });
+        c.enumValues.forEach((v, idx) => lk.getCell(idx + 1, 1).value = v);
+        formula = `=${sheetName}!$A$1:$A$${c.enumValues.length}`;
+        errorMsg = `Pick a value from the ${c.key} list`;
+      }
+    }
+    if (!formula) return;
+    // Apply list validation to rows 2..2000
+    for (let r = 2; r <= 2000; r += 1) {
+      ws.getCell(r, i + 1).dataValidation = {
+        type: 'list',
+        allowBlank: !c.required,
+        formulae: [formula],
+        showErrorMessage: true,
+        errorTitle: 'Invalid value',
+        error: errorMsg ?? 'Invalid value',
+      };
     }
   });
 

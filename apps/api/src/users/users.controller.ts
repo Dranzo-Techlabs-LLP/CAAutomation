@@ -42,8 +42,8 @@ export class UsersController {
   // ── Bulk operations (declared BEFORE :id catch-all so paths match correctly)
   @Get('bulk/template')
   @Permissions('user.create')
-  async downloadTemplate(@Res() res: Response): Promise<void> {
-    const buf = await this.bulk.template();
+  async downloadTemplate(@CurrentUser() user: RequestUser, @Res() res: Response): Promise<void> {
+    const buf = await this.bulk.template(user.firmId);
     res.setHeader('Content-Type', XLSX_MIME);
     res.setHeader('Content-Disposition', 'attachment; filename="users-template.xlsx"');
     res.send(buf);

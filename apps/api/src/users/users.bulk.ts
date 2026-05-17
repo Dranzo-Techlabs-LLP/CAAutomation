@@ -7,16 +7,26 @@ import { ColumnSpec, buildExport, buildTemplate, parseUpload } from '../common/e
 import { Role } from '../roles/role.entity';
 import { User } from './user.entity';
 
-const USER_COLUMNS: ColumnSpec[] = [
-  { key: 'name',                header: 'Name',                  required: true, example: 'Riya Kapoor' },
-  { key: 'email',               header: 'Email',                 required: true, example: 'riya@firm.in', note: 'Used as the unique key for upsert' },
-  { key: 'phone',               header: 'Phone',                 example: '+91 90000 00001' },
-  { key: 'roleName',            header: 'Role Name',             required: true, example: 'Associate', note: 'Must match an existing role in your firm (case-insensitive)' },
-  { key: 'isActive',            header: 'Active',                enumValues: ['true', 'false'], example: 'true' },
-  { key: 'defaultHourlyRate',   header: 'Default Hourly Rate (INR)', example: 1500, note: 'Stored as paise — value in rupees' },
-  { key: 'costRate',            header: 'Cost Rate (INR/hr)',    example: 900, note: 'Stored as paise — value in rupees' },
-  { key: 'password',            header: 'Password',              note: 'Required ONLY when creating a new user. Ignored on update.' },
-];
+function userColumns(opts: { roleNames: string[] }): ColumnSpec[] {
+  return [
+    { key: 'name',                header: 'Name',                  required: true, example: 'Riya Kapoor' },
+    { key: 'email',               header: 'Email',                 required: true, example: 'riya@firm.in', note: 'Used as the unique key for upsert' },
+    { key: 'phone',               header: 'Phone',                 example: '+91 90000 00001' },
+    {
+      key: 'roleName',
+      header: 'Role Name',
+      required: true,
+      lookupSheet: opts.roleNames.length ? 'Roles' : undefined,
+      enumValues: opts.roleNames.length ? undefined : ['Associate', 'Manager', 'Partner'],
+      example: opts.roleNames[0] ?? 'Associate',
+      note: 'Pick from the dropdown — must match an existing role in your firm.',
+    },
+    { key: 'isActive',            header: 'Active',                enumValues: ['true', 'false'], example: 'true' },
+    { key: 'defaultHourlyRate',   header: 'Default Hourly Rate (INR)', example: 1500, note: 'Stored as paise internally — value in rupees per hour' },
+    { key: 'costRate',            header: 'Cost Rate (INR/hr)',    example: 900,  note: 'Stored as paise internally — value in rupees per hour' },
+    { key: 'password',            header: 'Password',              note: 'Required ONLY when creating a new user. Ignored on update.' },
+  ];
+}
 
 const INSTRUCTIONS = [
   'Required columns: Name, Email, Role Name. Password required only for NEW users.',
@@ -42,11 +52,14 @@ export class UsersBulkService {
     private readonly config: ConfigService,
   ) {}
 
-  template(): Promise<Buffer> {
+  async template(firmId: string): Promise<Buffer> {
+    const firmRoles = await this.roles.find({ where: { firmId }, order: { name: 'ASC' } });
+    const roleNames = firmRoles.map((r) => r.name).filter(Boolean);
     return buildTemplate({
       sheetName: 'Users',
-      columns: USER_COLUMNS,
+      columns: userColumns({ roleNames }),
       instructions: INSTRUCTIONS,
+      lookupSheets: roleNames.length ? [{ name: 'Roles', values: roleNames }] : undefined,
     });
   }
 
@@ -65,7 +78,7 @@ export class UsersBulkService {
       costRate: u.costRate ? Number(u.costRate) / 100 : '',
       password: '',
     }));
-    return buildExport({ sheetName: 'Users', columns: USER_COLUMNS, rows: exportRows });
+    return buildExport({ sheetName: 'Users', columns: userColumns({ roleNames: [] }), rows: exportRows });
   }
 
   async import(firmId: string, actorUserId: string, buffer: Buffer): Promise<BulkResult> {
@@ -79,7 +92,7 @@ export class UsersBulkService {
       costRate?: string | number;
       password?: string;
     };
-    const rows = await parseUpload<Row>({ buffer, columns: USER_COLUMNS });
+    const rows = await parseUpload<Row>({ buffer, columns: userColumns({ roleNames: [] }) });
 
     const firmRoles = await this.roles.find({ where: { firmId } });
     const roleByName = new Map(firmRoles.map((r) => [r.name.toLowerCase(), r]));

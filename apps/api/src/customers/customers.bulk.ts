@@ -5,19 +5,27 @@ import { ColumnSpec, buildExport, buildTemplate, parseUpload } from '../common/e
 import { User } from '../users/user.entity';
 import { Customer, CustomerStatus, CustomerType, EnquirySource } from './customer.entity';
 
-const CUSTOMER_COLUMNS: ColumnSpec[] = [
-  { key: 'name',          header: 'Name',           required: true,  example: 'Acme Pvt Ltd' },
-  { key: 'type',          header: 'Type',           required: true,  enumValues: Object.values(CustomerType), example: 'company' },
-  { key: 'email',         header: 'Email',          example: 'finance@acme.in' },
-  { key: 'contactNo',     header: 'Contact No',     example: '+91 98765 43210' },
-  { key: 'gstin',         header: 'GSTIN',          example: '29AAACS1234B1Z5' },
-  { key: 'pan',           header: 'PAN',            example: 'AAACS1234B' },
-  { key: 'address',       header: 'Address',        example: 'Plot 14, MG Road, Bengaluru' },
-  { key: 'enquirySource', header: 'Enquiry Source', required: true, enumValues: Object.values(EnquirySource), example: 'referral' },
-  { key: 'status',        header: 'Status',         enumValues: Object.values(CustomerStatus), example: 'enquiry' },
-  { key: 'briefText',     header: 'Brief / Notes',  example: 'Annual GST + ITR engagement' },
-  { key: 'ownerEmail',    header: 'Owner Email',    note: 'Existing user email (looked up to set owner_user_id). Optional.', example: 'partner@example.com' },
-];
+function customerColumns(opts: { ownerEmails: string[] }): ColumnSpec[] {
+  return [
+    { key: 'name',          header: 'Name',           required: true,  example: 'Acme Pvt Ltd' },
+    { key: 'type',          header: 'Type',           required: true,  enumValues: Object.values(CustomerType), example: 'company' },
+    { key: 'email',         header: 'Email',          example: 'finance@acme.in' },
+    { key: 'contactNo',     header: 'Contact No',     example: '+91 98765 43210' },
+    { key: 'gstin',         header: 'GSTIN',          example: '29AAACS1234B1Z5' },
+    { key: 'pan',           header: 'PAN',            example: 'AAACS1234B' },
+    { key: 'address',       header: 'Address',        example: 'Plot 14, MG Road, Bengaluru' },
+    { key: 'enquirySource', header: 'Enquiry Source', required: true, enumValues: Object.values(EnquirySource), example: 'referral' },
+    { key: 'status',        header: 'Status',         enumValues: Object.values(CustomerStatus), example: 'enquiry' },
+    { key: 'briefText',     header: 'Brief / Notes',  example: 'Annual GST + ITR engagement' },
+    {
+      key: 'ownerEmail',
+      header: 'Owner Email',
+      lookupSheet: opts.ownerEmails.length ? 'OwnerEmails' : undefined,
+      note: 'Pick from the dropdown — must be an active user in your firm. Leave blank to keep existing (update) or auto-assign yourself (create).',
+      example: opts.ownerEmails[0] ?? 'partner@example.com',
+    },
+  ];
+}
 
 const INSTRUCTIONS = [
   'Required columns: Name, Type, Enquiry Source.',
@@ -42,11 +50,19 @@ export class CustomersBulkService {
     @InjectRepository(User) private readonly users: Repository<User>,
   ) {}
 
-  template(): Promise<Buffer> {
+  async template(firmId: string): Promise<Buffer> {
+    const firmUsers = await this.users.find({
+      where: { firmId },
+      order: { email: 'ASC' },
+    });
+    const ownerEmails = firmUsers.map((u) => u.email).filter(Boolean);
     return buildTemplate({
       sheetName: 'Customers',
-      columns: CUSTOMER_COLUMNS,
+      columns: customerColumns({ ownerEmails }),
       instructions: INSTRUCTIONS,
+      lookupSheets: ownerEmails.length
+        ? [{ name: 'OwnerEmails', values: ownerEmails }]
+        : undefined,
     });
   }
 
@@ -73,7 +89,7 @@ export class CustomersBulkService {
       briefText: c.briefText ?? '',
       ownerEmail: c.ownerUserId ? ownerById.get(c.ownerUserId) ?? '' : '',
     }));
-    return buildExport({ sheetName: 'Customers', columns: CUSTOMER_COLUMNS, rows: exportRows });
+    return buildExport({ sheetName: 'Customers', columns: customerColumns({ ownerEmails: [] }), rows: exportRows });
   }
 
   async import(firmId: string, actorUserId: string, buffer: Buffer): Promise<BulkResult> {
@@ -90,7 +106,7 @@ export class CustomersBulkService {
       briefText?: string;
       ownerEmail?: string;
     };
-    const rows = await parseUpload<Row>({ buffer, columns: CUSTOMER_COLUMNS });
+    const rows = await parseUpload<Row>({ buffer, columns: customerColumns({ ownerEmails: [] }) });
 
     // Preload firm users keyed by lowercase email for owner lookup.
     const firmUsers = await this.users.find({ where: { firmId } });
