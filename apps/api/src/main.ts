@@ -1,12 +1,14 @@
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { BadRequestException, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import type { ValidationError } from 'class-validator';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { AppModule } from './app.module';
 import { ProblemDetailsFilter } from './common/filters/problem-details.filter';
 import { WinstonAppLogger } from './common/logger/winston-app.logger';
+import { BodyTrimMiddleware } from './common/middleware/body-trim.middleware';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 
 async function bootstrap() {
@@ -28,6 +30,9 @@ async function bootstrap() {
     }),
   );
   app.use(new RequestIdMiddleware().use);
+  // Drop empty-string fields + trim whitespace BEFORE validation pipe sees the
+  // body, so optional inputs left blank don't trigger 400s on strict validators.
+  app.use(new BodyTrimMiddleware().use);
 
   app.setGlobalPrefix(config.get<string>('API_PREFIX') ?? 'api/v1', {
     exclude: ['health', 'health/ready'],
@@ -38,6 +43,22 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      // Compose a friendly human message from the first failing constraint
+      // so the frontend can surface it directly instead of "Request failed: 400".
+      exceptionFactory: (errors: ValidationError[]) => {
+        const flatten = (err: ValidationError, parent = ''): string[] => {
+          const path = parent ? `${parent}.${err.property}` : err.property;
+          const here = err.constraints ? Object.values(err.constraints).map((m) => `${path}: ${m}`) : [];
+          const nested = (err.children ?? []).flatMap((c) => flatten(c, path));
+          return [...here, ...nested];
+        };
+        const messages = errors.flatMap((e) => flatten(e));
+        const primary = messages[0] ?? 'Invalid input';
+        return new BadRequestException({
+          message: primary,
+          details: messages,
+        });
+      },
     }),
   );
   app.useGlobalFilters(new ProblemDetailsFilter());

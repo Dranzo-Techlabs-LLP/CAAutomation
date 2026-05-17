@@ -31,7 +31,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
           ? 'Internal Server Error'
           : 'Request Failed';
 
-    const detail =
+    const rawDetail =
       typeof exceptionResponse === 'object' &&
       exceptionResponse !== null &&
       'message' in exceptionResponse
@@ -40,10 +40,18 @@ export class ProblemDetailsFilter implements ExceptionFilter {
           ? exception.message
           : undefined;
 
+    // Validation errors can come back as a string OR an array of constraint
+    // messages — collapse to a single human-readable line for `message`.
+    const detail = Array.isArray(rawDetail)
+      ? rawDetail.join('; ')
+      : rawDetail;
+
     response.status(status).type('application/problem+json').json({
       type: 'about:blank',
       title,
       status,
+      // Expose both keys for compatibility — the frontend reads `message`.
+      message: detail,
       detail,
       instance: request.url,
       requestId: request.requestId,
