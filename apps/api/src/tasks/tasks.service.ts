@@ -53,6 +53,7 @@ export class TasksService {
       reviewDate: t.reviewDate?.toISOString() ?? null,
       clientDueDate: t.clientDueDate?.toISOString() ?? null,
       resolution: t.resolution ?? null,
+      reviewComments: t.reviewComments ?? null,
     };
   }
 
@@ -85,10 +86,18 @@ export class TasksService {
     return this.toResponse(saved);
   }
 
-  async list(firmId: string, query: PaginationQueryDto): Promise<PaginatedResponseDto<TaskResponseDto>> {
+  async list(
+    firmId: string,
+    query: PaginationQueryDto,
+    opts: { restrictToUserId?: string | null } = {},
+  ): Promise<PaginatedResponseDto<TaskResponseDto>> {
     const limit = query.limit ?? 50;
-    // Hide subtasks from main list by default — they live under their parent
-    const baseWhere = { firmId, parentTaskId: IsNull() };
+    // Hide subtasks from main list by default — they live under their parent.
+    // When restrictToUserId is set, only return tasks assigned to that user.
+    const baseWhere: Record<string, unknown> = { firmId, parentTaskId: IsNull() };
+    if (opts.restrictToUserId) {
+      baseWhere.assignedToUserId = opts.restrictToUserId;
+    }
     const where = query.cursor
       ? { ...baseWhere, createdAt: LessThan(new Date(query.cursor)) }
       : baseWhere;
@@ -146,6 +155,7 @@ export class TasksService {
     if (dto.reviewDate !== undefined) task.reviewDate = dto.reviewDate ? new Date(dto.reviewDate) : null;
     if (dto.clientDueDate !== undefined) task.clientDueDate = dto.clientDueDate ? new Date(dto.clientDueDate) : null;
     if (dto.resolution !== undefined) task.resolution = dto.resolution;
+    if (dto.reviewComments !== undefined) task.reviewComments = dto.reviewComments;
     if (dto.hourlyRate !== undefined) task.hourlyRate = dto.hourlyRate || null;
     task.updatedBy = actorUserId;
     const saved = await this.taskRepository.save(task);
@@ -221,11 +231,30 @@ export class TasksService {
   async createSubtask(
     firmId: string,
     parentId: string,
-    body: { title: string; description?: string; priority?: TaskPriority; estimatedHours?: string; assignedToUserId?: string; dueDate?: string },
+    body: {
+      title: string;
+      description?: string;
+      priority?: TaskPriority;
+      estimatedHours?: string;
+      assignedToUserId?: string | null;
+      assignedTeamId?: string | null;
+      dueDate?: string;
+      staffDueDate?: string;
+      reviewDate?: string;
+      clientDueDate?: string;
+      reviewComments?: string;
+      hourlyRate?: string;
+      billable?: boolean;
+    },
     actorUserId: string,
   ): Promise<TaskResponseDto> {
     const parent = await this.getEntityOrFail(firmId, parentId);
-    const assigned = Boolean(body.assignedToUserId);
+    // Default assignee falls back to parent's assignee when caller does not specify.
+    const resolvedAssignee =
+      body.assignedToUserId !== undefined ? body.assignedToUserId : parent.assignedToUserId ?? null;
+    const resolvedTeam =
+      body.assignedTeamId !== undefined ? body.assignedTeamId : parent.assignedTeamId ?? null;
+    const isAssigned = Boolean(resolvedAssignee || resolvedTeam);
     const sub = this.taskRepository.create({
       firmId,
       customerId: parent.customerId,
@@ -233,16 +262,25 @@ export class TasksService {
       parentTaskId: parent.id,
       title: body.title,
       description: body.description ?? null,
+      reviewComments: body.reviewComments ?? null,
       priority: body.priority ?? parent.priority,
-      status: assigned ? TaskStatus.Assigned : TaskStatus.Unassigned,
-      assignedToUserId: body.assignedToUserId ?? null,
-      dueDate: body.dueDate ? new Date(body.dueDate) : null,
+      status: isAssigned ? TaskStatus.Assigned : TaskStatus.Unassigned,
+      assignedToUserId: resolvedAssignee,
+      assignedTeamId: resolvedTeam,
+      dueDate: body.dueDate ? new Date(body.dueDate) : parent.dueDate ?? null,
+      staffDueDate: body.staffDueDate ? new Date(body.staffDueDate) : null,
+      reviewDate: body.reviewDate ? new Date(body.reviewDate) : null,
+      clientDueDate: body.clientDueDate ? new Date(body.clientDueDate) : null,
       estimatedHours: body.estimatedHours ?? null,
+      hourlyRate: body.hourlyRate ?? null,
+      billable: body.billable ?? parent.billable,
       generatedBy: TaskGeneratedBy.Manual,
       createdBy: actorUserId,
       updatedBy: actorUserId,
     });
-    return this.toResponse(await this.taskRepository.save(sub));
+    const saved = await this.taskRepository.save(sub);
+    await this.writeAudit('task.created', firmId, saved.id, actorUserId, null, this.snapshot(saved));
+    return this.toResponse(saved);
   }
 
   private async materializeSubtasksFromTemplates(firmId: string, parent: Task, actorUserId: string): Promise<void> {
@@ -252,6 +290,9 @@ export class TasksService {
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
     if (!templates.length) return;
+    const inheritedAssignee = parent.assignedToUserId ?? null;
+    const inheritedTeam = parent.assignedTeamId ?? null;
+    const isAssigned = Boolean(inheritedAssignee || inheritedTeam);
     const subs = templates.map((t) =>
       this.taskRepository.create({
         firmId,
@@ -261,8 +302,12 @@ export class TasksService {
         title: t.title,
         description: t.description ?? null,
         priority: t.priority,
-        status: TaskStatus.Unassigned,
+        status: isAssigned ? TaskStatus.Assigned : TaskStatus.Unassigned,
+        assignedToUserId: inheritedAssignee,
+        assignedTeamId: inheritedTeam,
+        dueDate: parent.dueDate ?? null,
         estimatedHours: t.estimatedHours ?? null,
+        billable: parent.billable,
         generatedBy: TaskGeneratedBy.Manual,
         createdBy: actorUserId,
         updatedBy: actorUserId,
@@ -281,6 +326,7 @@ export class TasksService {
       title: task.title,
       description: task.description,
       resolution: task.resolution,
+      reviewComments: task.reviewComments,
       priority: task.priority,
       status: task.status,
       assignedToUserId: task.assignedToUserId,

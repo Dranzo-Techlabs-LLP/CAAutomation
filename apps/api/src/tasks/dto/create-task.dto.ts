@@ -36,6 +36,11 @@ export class CreateTaskDto {
   @IsString()
   resolution?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewComments?: string;
+
   @ApiPropertyOptional({ enum: TaskPriority })
   @IsOptional()
   @IsEnum(TaskPriority)

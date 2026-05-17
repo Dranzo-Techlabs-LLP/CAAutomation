@@ -31,7 +31,9 @@ export class TasksController {
     @CurrentUser() user: RequestUser,
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<TaskResponseDto>> {
-    return this.tasksService.list(user.firmId, query);
+    // Users without `task.view_all` see only tasks assigned to them.
+    const restrictToUserId = user.permissions.includes('task.view_all') ? null : user.id;
+    return this.tasksService.list(user.firmId, query, { restrictToUserId });
   }
 
   @Get('my')

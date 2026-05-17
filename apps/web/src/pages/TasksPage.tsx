@@ -18,13 +18,14 @@ interface Task {
   clientDueDate?: string;
   generatedBy: string;
   resolution?: string;
+  reviewComments?: string | null;
   createdAt?: string;
   parentTaskId?: string | null;
 }
 interface Comment { id: string; userId: string; body: string; createdAt: string; }
 interface Attachment { id: string; fileName: string; fileUrl: string; mimeType: string; sizeBytes: string; tag: string; createdAt: string; uploadedByUserId: string; }
 interface TimeLogEntry { id: string; userId: string; startedAt: string; endedAt?: string; durationMinutes?: number; notes?: string; isBillable: boolean; }
-interface Subtask { id: string; title: string; description?: string | null; status: string; priority: string; assignedToUserId?: string | null; dueDate?: string | null; estimatedHours?: string | null; customerId: string; generatedBy: string; parentTaskId?: string | null; createdAt?: string; }
+interface Subtask { id: string; title: string; description?: string | null; reviewComments?: string | null; status: string; priority: string; assignedToUserId?: string | null; dueDate?: string | null; estimatedHours?: string | null; customerId: string; generatedBy: string; parentTaskId?: string | null; createdAt?: string; }
 interface TaskStatusDef { id: string; code: string; label: string; color?: string | null; sortOrder: number; isInitial: boolean; isTerminal: boolean; isSystem: boolean; }
 interface AuditEntry { id: string; userId?: string | null; action: string; entityType: string; entityId: string; beforeJson?: Record<string, unknown> | null; afterJson?: Record<string, unknown> | null; createdAt: string; }
 
@@ -114,7 +115,7 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '' });
+  const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -141,7 +142,7 @@ export default function TasksPage() {
     api<TaskStatusDef[]>('/task-statuses').then(setStatuses).catch(() => setStatuses([]));
   }, [load]);
 
-  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '' }); setShowForm(false); setError(''); };
+  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '' }); setShowForm(false); setError(''); };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
@@ -156,6 +157,7 @@ export default function TasksPage() {
       if (form.reviewDate) body.reviewDate = new Date(form.reviewDate).toISOString();
       if (form.clientDueDate) body.clientDueDate = new Date(form.clientDueDate).toISOString();
       if (form.resolution) body.resolution = form.resolution;
+      if (form.reviewComments) body.reviewComments = form.reviewComments;
       await api('/tasks', { method: 'POST', body: JSON.stringify(body) });
       resetForm(); load();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to create task'); }
@@ -310,6 +312,7 @@ export default function TasksPage() {
           </div>
           <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
           <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>
+          <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Comments</label><textarea className="input-field" rows={2} value={form.reviewComments} onChange={(e) => setForm({ ...form, reviewComments: e.target.value })} placeholder="Reviewer notes / feedback (optional)" /></div>
           <button type="submit" className="primary-button">Create Task</button>
         </form>
       )}
@@ -487,8 +490,9 @@ function TaskDetailPanel({
   const [timeLogs, setTimeLogs] = useState<TimeLogEntry[]>([]);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [newSubtask, setNewSubtask] = useState({
-    title: '', description: '', priority: 'medium',
-    assignedToUserId: '', dueDate: '', estimatedHours: '',
+    title: '', description: '', reviewComments: '', priority: task.priority || 'medium',
+    assignedToUserId: task.assignedToUserId || '',
+    dueDate: '', estimatedHours: '',
   });
   const [showSubtaskForm, setShowSubtaskForm] = useState(false);
   const [history, setHistory] = useState<AuditEntry[]>([]);
@@ -500,6 +504,7 @@ function TaskDetailPanel({
   const [editForm, setEditForm] = useState({
     title: task.title,
     description: task.description || '',
+    reviewComments: task.reviewComments || '',
     priority: task.priority,
     assignedToUserId: task.assignedToUserId || '',
     dueDate: task.dueDate ? task.dueDate.slice(0, 10) : '',
@@ -538,13 +543,18 @@ function TaskDetailPanel({
         body: JSON.stringify({
           title: newSubtask.title,
           description: newSubtask.description || undefined,
+          reviewComments: newSubtask.reviewComments || undefined,
           priority: newSubtask.priority || undefined,
           estimatedHours: newSubtask.estimatedHours || undefined,
           assignedToUserId: newSubtask.assignedToUserId || undefined,
           dueDate: newSubtask.dueDate ? new Date(newSubtask.dueDate).toISOString() : undefined,
         }),
       });
-      setNewSubtask({ title: '', description: '', priority: 'medium', assignedToUserId: '', dueDate: '', estimatedHours: '' });
+      setNewSubtask({
+        title: '', description: '', reviewComments: '', priority: task.priority || 'medium',
+        assignedToUserId: task.assignedToUserId || '',
+        dueDate: '', estimatedHours: '',
+      });
       setShowSubtaskForm(false);
       loadSubtasks();
     } catch (err: unknown) {
@@ -742,6 +752,10 @@ function TaskDetailPanel({
                     <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label>
                     <textarea className="input-field" rows={3} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
                   </div>
+                  <div>
+                    <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Comments</label>
+                    <textarea className="input-field" rows={3} value={editForm.reviewComments} onChange={(e) => setEditForm({ ...editForm, reviewComments: e.target.value })} placeholder="Reviewer notes / feedback" />
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label>
@@ -783,7 +797,8 @@ function TaskDetailPanel({
                     <button className="primary-button text-xs" onClick={async () => {
                       try {
                         const body: Record<string, unknown> = { title: editForm.title, priority: editForm.priority };
-                        if (editForm.description) body.description = editForm.description;
+                        body.description = editForm.description || null;
+                        body.reviewComments = editForm.reviewComments || null;
                         if (editForm.assignedToUserId) body.assignedToUserId = editForm.assignedToUserId;
                         if (editForm.dueDate) body.dueDate = new Date(editForm.dueDate).toISOString();
                         if (editForm.staffDueDate) body.staffDueDate = new Date(editForm.staffDueDate).toISOString();
@@ -801,6 +816,13 @@ function TaskDetailPanel({
                 <>
                   {task.description && (
                     <div><span className="text-[13px] font-medium text-muted-foreground">Description</span><p className="mt-1 text-sm whitespace-pre-wrap rounded-md bg-accent/20 p-2">{task.description}</p></div>
+                  )}
+
+                  {task.reviewComments && (
+                    <div>
+                      <span className="text-[13px] font-medium text-muted-foreground">Review Comments</span>
+                      <p className="mt-1 text-sm whitespace-pre-wrap rounded-md border border-amber-200 bg-amber-50/40 p-2 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">{task.reviewComments}</p>
+                    </div>
                   )}
 
                   {/* Resolution */}
@@ -973,6 +995,13 @@ function TaskDetailPanel({
                       <input type="number" min="0" step="0.25" className="input-field w-full" placeholder="0.0" value={newSubtask.estimatedHours} onChange={(e) => setNewSubtask({ ...newSubtask, estimatedHours: e.target.value })} />
                     </div>
                   </div>
+                  <textarea
+                    className="input-field w-full"
+                    rows={2}
+                    placeholder="Review Comments (optional)"
+                    value={newSubtask.reviewComments}
+                    onChange={(e) => setNewSubtask({ ...newSubtask, reviewComments: e.target.value })}
+                  />
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>Attachments and comments can be added after creation — open the subtask to manage them.</span>
                     <button type="submit" className="primary-button text-xs">Create Subtask</button>

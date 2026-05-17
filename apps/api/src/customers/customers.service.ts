@@ -18,7 +18,11 @@ export class CustomersService {
       ...dto,
       firmId,
       ownerUserId: dto.ownerUserId ?? actorUserId,
-      status: CustomerStatus.Enquiry,
+      status: dto.status ?? CustomerStatus.Enquiry,
+      onboardedAt:
+        dto.status === CustomerStatus.Onboarded || dto.status === CustomerStatus.Active
+          ? new Date()
+          : null,
       createdBy: actorUserId,
       updatedBy: actorUserId,
     });
@@ -50,14 +54,26 @@ export class CustomersService {
     const customer = await this.getEntityOrFail(firmId, id);
     if (dto.name !== undefined) customer.name = dto.name;
     if (dto.type !== undefined) customer.type = dto.type;
-    if (dto.email !== undefined) customer.email = dto.email;
-    if (dto.contactNo !== undefined) customer.contactNo = dto.contactNo;
-    if (dto.gstin !== undefined) customer.gstin = dto.gstin;
-    if (dto.pan !== undefined) customer.pan = dto.pan;
-    if (dto.address !== undefined) customer.address = dto.address;
-    if (dto.status !== undefined) customer.status = dto.status;
-    if (dto.ownerUserId !== undefined) customer.ownerUserId = dto.ownerUserId;
-    if (dto.defaultTeamId !== undefined) customer.defaultTeamId = dto.defaultTeamId;
+    if (dto.email !== undefined) customer.email = dto.email ?? null;
+    if (dto.contactNo !== undefined) customer.contactNo = dto.contactNo ?? null;
+    if (dto.gstin !== undefined) customer.gstin = dto.gstin ?? null;
+    if (dto.pan !== undefined) customer.pan = dto.pan ?? null;
+    if (dto.address !== undefined) customer.address = dto.address ?? null;
+    if (dto.enquirySource !== undefined) customer.enquirySource = dto.enquirySource;
+    if (dto.status !== undefined) {
+      // Capture onboarding moment if status transitions into onboarded/active for the first time.
+      if (
+        !customer.onboardedAt &&
+        (dto.status === CustomerStatus.Onboarded || dto.status === CustomerStatus.Active)
+      ) {
+        customer.onboardedAt = new Date();
+      }
+      customer.status = dto.status;
+    }
+    if (dto.briefText !== undefined) customer.briefText = dto.briefText ?? null;
+    if (dto.requirementsJson !== undefined) customer.requirementsJson = dto.requirementsJson;
+    if (dto.ownerUserId !== undefined) customer.ownerUserId = dto.ownerUserId ?? null;
+    if (dto.defaultTeamId !== undefined) customer.defaultTeamId = dto.defaultTeamId ?? null;
     customer.updatedBy = actorUserId;
     return this.toResponse(await this.customerRepository.save(customer));
   }
@@ -88,6 +104,8 @@ export class CustomersService {
       address: customer.address,
       enquirySource: customer.enquirySource,
       status: customer.status,
+      briefText: customer.briefText,
+      requirementsJson: customer.requirementsJson,
       ownerUserId: customer.ownerUserId,
       defaultTeamId: customer.defaultTeamId,
       onboardedAt: customer.onboardedAt,

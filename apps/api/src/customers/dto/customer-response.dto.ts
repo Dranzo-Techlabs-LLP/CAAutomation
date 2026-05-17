@@ -36,6 +36,12 @@ export class CustomerResponseDto {
   status!: CustomerStatus;
 
   @ApiPropertyOptional()
+  briefText?: string | null;
+
+  @ApiPropertyOptional()
+  requirementsJson?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional()
   ownerUserId?: string | null;
 
   @ApiPropertyOptional()

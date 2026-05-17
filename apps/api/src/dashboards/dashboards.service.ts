@@ -58,9 +58,13 @@ export class DashboardsService {
     return { myOpenTasks, myOverdueTasks, myHours: Math.round((minutes / 60) * 100) / 100 };
   }
 
-  async complianceCalendar(firmId: string) {
+  async complianceCalendar(firmId: string, opts: { restrictToUserId?: string | null } = {}) {
+    const where: Record<string, unknown> = { firmId, generatedBy: 'recurrence' as Task['generatedBy'] };
+    if (opts.restrictToUserId) {
+      where.assignedToUserId = opts.restrictToUserId;
+    }
     const tasks = await this.taskRepository.find({
-      where: { firmId, generatedBy: 'recurrence' as Task['generatedBy'] },
+      where,
       order: { dueDate: 'ASC' },
       take: 500,
     });
@@ -70,6 +74,7 @@ export class DashboardsService {
       customerId: task.customerId,
       serviceId: task.serviceId,
       status: task.status,
+      assignedToUserId: task.assignedToUserId,
       dueDate: task.dueDate,
     }));
   }

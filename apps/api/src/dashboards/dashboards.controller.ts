@@ -35,6 +35,7 @@ export class DashboardsController {
   @Get('compliance-calendar')
   @Permissions('dashboard.compliance_calendar')
   complianceCalendar(@CurrentUser() user: RequestUser) {
-    return this.dashboardsService.complianceCalendar(user.firmId);
+    const restrictToUserId = user.permissions.includes('calendar.view_all') ? null : user.id;
+    return this.dashboardsService.complianceCalendar(user.firmId, { restrictToUserId });
   }
 }

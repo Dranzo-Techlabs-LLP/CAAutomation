@@ -53,6 +53,11 @@ export class UpdateTaskDto {
   @IsString()
   resolution?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reviewComments?: string;
+
   @ApiPropertyOptional({ description: 'Per-hour rate override in paise' })
   @IsOptional()
   @IsString()

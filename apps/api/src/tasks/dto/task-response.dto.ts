@@ -26,6 +26,9 @@ export class TaskResponseDto {
   @ApiPropertyOptional()
   resolution?: string | null;
 
+  @ApiPropertyOptional()
+  reviewComments?: string | null;
+
   @ApiProperty({ enum: TaskPriority })
   priority!: TaskPriority;
 
