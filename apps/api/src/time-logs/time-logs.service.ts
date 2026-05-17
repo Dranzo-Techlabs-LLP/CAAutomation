@@ -80,9 +80,15 @@ export class TimeLogsService {
     const parent = await this.tasksService.getEntityOrFail(firmId, taskId);
     const subs = await this.taskRepository.find({
       where: { firmId, parentTaskId: taskId },
-      select: ['id', 'title'],
+      select: ['id', 'title', 'sortOrder'],
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
     const taskIds = [parent.id, ...subs.map((s) => s.id)];
+    // Position 0 = parent, 1..N = subtasks in displayed order.
+    const taskOrderById = new Map<string, number>([
+      [parent.id, 0],
+      ...subs.map((s, idx) => [s.id, idx + 1] as [string, number]),
+    ]);
     const taskTitleById = new Map<string, string>([
       [parent.id, parent.title],
       ...subs.map((s) => [s.id, s.title] as [string, string]),
@@ -144,16 +150,35 @@ export class TimeLogsService {
       }
     }
 
+    // Sort entries by task position first (parent → subtask 1 → 2 → ...),
+    // then by most recent within each task so the order in the Efforts list
+    // matches the subtask order shown in the Subtasks tab.
+    const orderedEntries = logs
+      .map((l) => ({
+        ...l,
+        taskTitle: taskTitleById.get(l.taskId) ?? '',
+        userName: l.userId ? userNameById.get(l.userId) ?? null : null,
+        _order: taskOrderById.get(l.taskId) ?? 999,
+      }))
+      .sort((a, b) => {
+        if (a._order !== b._order) return a._order - b._order;
+        return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
+      })
+      .map(({ _order, ...rest }) => rest);
+
+    // byTask: parent first, then subtasks in their displayed sort order.
+    const orderedByTask = Array.from(byTaskMap.values()).sort((a, b) => {
+      const oa = taskOrderById.get(a.taskId) ?? 999;
+      const ob = taskOrderById.get(b.taskId) ?? 999;
+      return oa - ob;
+    });
+
     return {
       totalMinutes: total,
       billableMinutes: billable,
       byAssignee: Array.from(byAssigneeMap.values()).sort((a, b) => b.minutes - a.minutes),
-      byTask: Array.from(byTaskMap.values()).sort((a, b) => (a.isParent ? -1 : b.isParent ? 1 : 0)),
-      entries: logs.map((l) => ({
-        ...l,
-        taskTitle: taskTitleById.get(l.taskId) ?? '',
-        userName: l.userId ? userNameById.get(l.userId) ?? null : null,
-      })),
+      byTask: orderedByTask,
+      entries: orderedEntries,
     };
   }
 }

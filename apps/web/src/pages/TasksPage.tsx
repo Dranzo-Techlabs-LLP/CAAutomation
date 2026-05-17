@@ -342,7 +342,7 @@ export default function TasksPage() {
       {/* Field Visibility Modal */}
       {showFieldSettings && (
         <div className="modal-overlay" onClick={() => setShowFieldSettings(false)}>
-          <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <div>
                 <h3 className="modal-title">Task Form Fields</h3>
@@ -1212,6 +1212,12 @@ function TaskDetailPanel({
                 </div>
               ) : (
                 <>
+                {canEdit && subtasks.length > 1 && (
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 9l4-4 4 4M8 15l4 4 4-4" /></svg>
+                    <span>Use the up/down arrows to reorder subtasks. Position number is shown between the arrows.</span>
+                  </div>
+                )}
                 <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
                   {subtasks.map((s, idx) => {
                     const done = s.status === 'completed';
@@ -1219,26 +1225,29 @@ function TaskDetailPanel({
                     const subTaskHrs = subTaskMinutes ? (subTaskMinutes / 60).toFixed(1) : null;
                     return (
                       <li key={s.id} className={`flex items-start gap-3 p-3 transition-colors ${done ? 'bg-green-50/50 dark:bg-green-900/10' : 'hover:bg-accent/30'}`}>
-                        {/* Reorder column */}
+                        {/* Reorder column — visible drag handle + arrows */}
                         {canEdit && (
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col items-center gap-0.5 border-r border-border pr-2">
                             <button
                               type="button"
                               onClick={() => moveSubtask(idx, -1)}
                               disabled={idx === 0}
-                              className="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                              className="rounded border border-border bg-panel p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
                               title="Move up"
+                              aria-label="Move subtask up"
                             >
-                              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 15l7-7 7 7" /></svg>
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 15l7-7 7 7" /></svg>
                             </button>
+                            <span className="text-[9px] font-mono text-muted-foreground">{idx + 1}</span>
                             <button
                               type="button"
                               onClick={() => moveSubtask(idx, 1)}
                               disabled={idx === subtasks.length - 1}
-                              className="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                              className="rounded border border-border bg-panel p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
                               title="Move down"
+                              aria-label="Move subtask down"
                             >
-                              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 9l-7 7-7-7" /></svg>
+                              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M19 9l-7 7-7-7" /></svg>
                             </button>
                           </div>
                         )}
@@ -1298,7 +1307,7 @@ function TaskDetailPanel({
                 {/* Quick log-time modal for a single subtask */}
                 {quickLogTarget && (
                   <div className="modal-overlay" onClick={() => setQuickLogTarget(null)}>
-                    <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
                       <div className="modal-header">
                         <div>
                           <h3 className="modal-title">Log time</h3>
