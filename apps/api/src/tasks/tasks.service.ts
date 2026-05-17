@@ -223,9 +223,36 @@ export class TasksService {
     await this.getEntityOrFail(firmId, parentId);
     const subs = await this.taskRepository.find({
       where: { firmId, parentTaskId: parentId },
-      order: { createdAt: 'ASC' },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
     return subs.map((t) => this.toResponse(t));
+  }
+
+  async reorderSubtasks(firmId: string, parentId: string, orderedIds: string[], actorUserId: string): Promise<TaskResponseDto[]> {
+    await this.getEntityOrFail(firmId, parentId);
+    const subs = await this.taskRepository.find({
+      where: { firmId, parentTaskId: parentId },
+    });
+    const byId = new Map(subs.map((s) => [s.id, s]));
+    const updates: Task[] = [];
+    orderedIds.forEach((id, idx) => {
+      const sub = byId.get(id);
+      if (sub) {
+        sub.sortOrder = idx;
+        sub.updatedBy = actorUserId;
+        updates.push(sub);
+      }
+    });
+    if (updates.length) await this.taskRepository.save(updates);
+    await this.writeAudit(
+      'subtask.reordered',
+      firmId,
+      parentId,
+      actorUserId,
+      null,
+      { orderedIds },
+    );
+    return this.listSubtasks(firmId, parentId);
   }
 
   async createSubtask(
@@ -255,7 +282,15 @@ export class TasksService {
     const resolvedTeam =
       body.assignedTeamId !== undefined ? body.assignedTeamId : parent.assignedTeamId ?? null;
     const isAssigned = Boolean(resolvedAssignee || resolvedTeam);
+    // Append to the bottom of the subtask list.
+    const maxOrder = await this.taskRepository
+      .createQueryBuilder('t')
+      .select('COALESCE(MAX(t.sort_order), -1)', 'max')
+      .where('t.firm_id = :firmId AND t.parent_task_id = :parentId', { firmId, parentId })
+      .getRawOne<{ max: number }>();
+    const nextOrder = (maxOrder?.max ?? -1) + 1;
     const sub = this.taskRepository.create({
+      sortOrder: nextOrder,
       firmId,
       customerId: parent.customerId,
       serviceId: parent.serviceId,
@@ -293,7 +328,7 @@ export class TasksService {
     const inheritedAssignee = parent.assignedToUserId ?? null;
     const inheritedTeam = parent.assignedTeamId ?? null;
     const isAssigned = Boolean(inheritedAssignee || inheritedTeam);
-    const subs = templates.map((t) =>
+    const subs = templates.map((t, idx) =>
       this.taskRepository.create({
         firmId,
         customerId: parent.customerId,
@@ -308,6 +343,7 @@ export class TasksService {
         dueDate: parent.dueDate ?? null,
         estimatedHours: t.estimatedHours ?? null,
         billable: parent.billable,
+        sortOrder: t.sortOrder ?? idx,
         generatedBy: TaskGeneratedBy.Manual,
         createdBy: actorUserId,
         updatedBy: actorUserId,
@@ -327,6 +363,7 @@ export class TasksService {
       description: task.description,
       resolution: task.resolution,
       reviewComments: task.reviewComments,
+      sortOrder: task.sortOrder ?? 0,
       priority: task.priority,
       status: task.status,
       assignedToUserId: task.assignedToUserId,

@@ -629,11 +629,76 @@ function TaskDetailPanel({
   const [timeForm, setTimeForm] = useState({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true });
   const [showTimeForm, setShowTimeForm] = useState(false);
 
+  // Per-subtask quick time-log form
+  const [quickLogTarget, setQuickLogTarget] = useState<Subtask | null>(null);
+  const [quickLogForm, setQuickLogForm] = useState({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true });
+
+  // Aggregated effort roll-up across parent + subtasks
+  const [rollup, setRollup] = useState<{
+    totalMinutes: number;
+    billableMinutes: number;
+    byAssignee: { userId: string | null; userName: string | null; minutes: number; billableMinutes: number; entries: number }[];
+    byTask: { taskId: string; title: string; isParent: boolean; minutes: number; entries: number }[];
+    entries: (TimeLogEntry & { taskTitle?: string; userName?: string | null; taskId?: string })[];
+  } | null>(null);
+  const loadRollup = () =>
+    api<NonNullable<typeof rollup>>(`/time-logs/task/${task.id}/rollup`).then(setRollup).catch(() => setRollup(null));
+
   const loadComments = () => api<Comment[]>(`/tasks/${task.id}/comments`).then(setComments).catch(() => {});
   const loadAttachments = () => api<Attachment[]>(`/attachments/task/${task.id}`).then(setAttachments).catch(() => {});
   const loadTimeLogs = () => api<TimeLogEntry[]>(`/time-logs/task/${task.id}`).then(setTimeLogs).catch(() => {});
   const loadSubtasks = () => api<Subtask[]>(`/tasks/${task.id}/subtasks`).then(setSubtasks).catch(() => {});
   const loadHistory = () => api<AuditEntry[]>(`/audit-logs/entity/task/${task.id}`).then(setHistory).catch(() => setHistory([]));
+
+  // Reorder subtasks (up/down arrow buttons in the subtask list)
+  const moveSubtask = async (index: number, dir: -1 | 1) => {
+    const next = [...subtasks];
+    const j = index + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[index], next[j]] = [next[j], next[index]];
+    setSubtasks(next); // optimistic
+    try {
+      await api(`/tasks/${task.id}/subtasks/reorder`, {
+        method: 'PATCH',
+        body: JSON.stringify({ orderedIds: next.map((s) => s.id) }),
+      });
+      loadSubtasks();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Reorder failed');
+      loadSubtasks();
+    }
+  };
+
+  // Quick log time against a single subtask without leaving the parent drawer
+  const submitQuickLog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickLogTarget) return;
+    const hrs = parseInt(quickLogForm.hours || '0', 10);
+    const mins = parseInt(quickLogForm.minutes || '0', 10);
+    if (hrs === 0 && mins === 0) { alert('Enter duration'); return; }
+    const totalMinutes = hrs * 60 + mins;
+    const start = new Date(quickLogForm.date + 'T09:00:00');
+    const end = new Date(start.getTime() + totalMinutes * 60000);
+    try {
+      await api('/time-logs', {
+        method: 'POST',
+        body: JSON.stringify({
+          taskId: quickLogTarget.id,
+          startedAt: start.toISOString(),
+          endedAt: end.toISOString(),
+          notes: quickLogForm.notes || undefined,
+          isBillable: quickLogForm.isBillable,
+        }),
+      });
+      setQuickLogTarget(null);
+      setQuickLogForm({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true });
+      loadTimeLogs();
+      loadRollup();
+      loadHistory();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to log time');
+    }
+  };
 
   useEffect(() => {
     loadComments();
@@ -641,6 +706,7 @@ function TaskDetailPanel({
     loadTimeLogs();
     loadSubtasks();
     loadHistory();
+    loadRollup();
   }, [task.id]);
 
   const addSubtask = async (e: React.FormEvent) => {
@@ -1141,11 +1207,37 @@ function TaskDetailPanel({
                   <p className="mt-1 text-[11.5px] text-muted-foreground">Break this task into smaller steps. Pre-defined templates from Services auto-populate here.</p>
                 </div>
               ) : (
+                <>
                 <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-                  {subtasks.map((s) => {
+                  {subtasks.map((s, idx) => {
                     const done = s.status === 'completed';
+                    const subTaskMinutes = rollup?.byTask.find((t) => t.taskId === s.id)?.minutes ?? 0;
+                    const subTaskHrs = subTaskMinutes ? (subTaskMinutes / 60).toFixed(1) : null;
                     return (
                       <li key={s.id} className={`flex items-start gap-3 p-3 transition-colors ${done ? 'bg-green-50/50 dark:bg-green-900/10' : 'hover:bg-accent/30'}`}>
+                        {/* Reorder column */}
+                        {canEdit && (
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => moveSubtask(idx, -1)}
+                              disabled={idx === 0}
+                              className="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                              title="Move up"
+                            >
+                              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 15l7-7 7 7" /></svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveSubtask(idx, 1)}
+                              disabled={idx === subtasks.length - 1}
+                              className="rounded px-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-30"
+                              title="Move down"
+                            >
+                              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 9l-7 7-7-7" /></svg>
+                            </button>
+                          </div>
+                        )}
                         <input
                           type="checkbox"
                           className="mt-0.5 h-4 w-4 cursor-pointer accent-current"
@@ -1175,17 +1267,72 @@ function TaskDetailPanel({
                               <span className="text-muted-foreground">{s.assignedToUserId ? userMap[s.assignedToUserId] : 'Unassigned'}</span>
                             )}
                             {s.dueDate && <span className="text-muted-foreground">Due {new Date(s.dueDate).toLocaleDateString('en-IN')}</span>}
+                            {subTaskHrs && <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">⏱ {subTaskHrs}h</span>}
                           </div>
                         </div>
-                        {canEdit && (
-                          <button onClick={() => deleteSubtask(s.id)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" title="Delete subtask">
-                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14" /></svg>
-                          </button>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {canLogTime && (
+                            <button
+                              onClick={() => { setQuickLogTarget(s); setQuickLogForm({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true }); }}
+                              className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                              title="Log time on this subtask"
+                            >
+                              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button onClick={() => deleteSubtask(s.id)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20" title="Delete subtask">
+                              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14" /></svg>
+                            </button>
+                          )}
+                        </div>
                       </li>
                     );
                   })}
                 </ul>
+
+                {/* Quick log-time modal for a single subtask */}
+                {quickLogTarget && (
+                  <div className="modal-overlay" onClick={() => setQuickLogTarget(null)}>
+                    <div className="modal-content max-w-md" onClick={(e) => e.stopPropagation()}>
+                      <div className="modal-header">
+                        <div>
+                          <h3 className="modal-title">Log time</h3>
+                          <p className="modal-subtitle truncate">on <span className="font-medium">{quickLogTarget.title}</span></p>
+                        </div>
+                        <button onClick={() => setQuickLogTarget(null)} className="rounded p-1 text-muted-foreground hover:bg-accent">
+                          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                      <form onSubmit={submitQuickLog} className="space-y-3 p-4">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="mb-1 block text-[11px] font-medium text-muted-foreground">Hours</label>
+                            <input type="number" min="0" className="input-field" value={quickLogForm.hours} onChange={(e) => setQuickLogForm({ ...quickLogForm, hours: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[11px] font-medium text-muted-foreground">Minutes</label>
+                            <input type="number" min="0" max="59" className="input-field" value={quickLogForm.minutes} onChange={(e) => setQuickLogForm({ ...quickLogForm, minutes: e.target.value })} />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[11px] font-medium text-muted-foreground">Date</label>
+                            <input type="date" className="input-field" value={quickLogForm.date} onChange={(e) => setQuickLogForm({ ...quickLogForm, date: e.target.value })} />
+                          </div>
+                        </div>
+                        <textarea className="input-field" rows={2} placeholder="Notes (optional)" value={quickLogForm.notes} onChange={(e) => setQuickLogForm({ ...quickLogForm, notes: e.target.value })} />
+                        <label className="flex items-center gap-2 text-[12px]">
+                          <input type="checkbox" checked={quickLogForm.isBillable} onChange={(e) => setQuickLogForm({ ...quickLogForm, isBillable: e.target.checked })} className="h-4 w-4 cursor-pointer accent-current" />
+                          Billable entry
+                        </label>
+                        <div className="flex justify-end gap-2">
+                          <button type="button" className="secondary-button" onClick={() => setQuickLogTarget(null)}>Cancel</button>
+                          <button type="submit" className="primary-button text-xs">Save Time Log</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+                </>
               )}
             </div>
           )}
@@ -1306,21 +1453,62 @@ function TaskDetailPanel({
           {/* Efforts / Time Logs Tab */}
           {tab === 'efforts' && (
             <div className="space-y-4">
-              {/* Summary Stats */}
+              {/* Summary Stats — parent + subtasks combined when rollup loaded */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="rounded-md border border-border p-3 text-center">
-                  <p className="text-2xl font-bold text-primary">{totalHours}</p>
-                  <p className="text-xs text-muted-foreground">Total Hours</p>
+                  <p className="text-2xl font-bold text-primary">{rollup ? (rollup.totalMinutes / 60).toFixed(1) : totalHours}</p>
+                  <p className="text-xs text-muted-foreground">Total Hours{rollup ? ' (incl. subtasks)' : ''}</p>
                 </div>
                 <div className="rounded-md border border-border p-3 text-center">
-                  <p className="text-2xl font-bold">{timeLogs.length}</p>
+                  <p className="text-2xl font-bold">{rollup ? rollup.entries.length : timeLogs.length}</p>
                   <p className="text-xs text-muted-foreground">Entries</p>
                 </div>
                 <div className="rounded-md border border-border p-3 text-center">
-                  <p className="text-2xl font-bold text-green-600">{timeLogs.filter((t) => t.isBillable).length}</p>
-                  <p className="text-xs text-muted-foreground">Billable</p>
+                  <p className="text-2xl font-bold text-green-600">{rollup ? (rollup.billableMinutes / 60).toFixed(1) : timeLogs.filter((t) => t.isBillable).length}</p>
+                  <p className="text-xs text-muted-foreground">{rollup ? 'Billable Hours' : 'Billable'}</p>
                 </div>
               </div>
+
+              {/* By Assignee roll-up */}
+              {rollup && rollup.byAssignee.length > 0 && (
+                <div className="rounded-md border border-border">
+                  <div className="border-b border-border bg-accent/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">By Assignee</div>
+                  <ul className="divide-y divide-border">
+                    {rollup.byAssignee.map((row) => {
+                      const hrs = (row.minutes / 60).toFixed(1);
+                      const billHrs = (row.billableMinutes / 60).toFixed(1);
+                      return (
+                        <li key={row.userId ?? '__null'} className="flex items-center justify-between px-3 py-2 text-sm">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium">{row.userName || (row.userId ? userMap[row.userId] : '') || 'Unassigned'}</div>
+                            <div className="text-[11px] text-muted-foreground">{row.entries} entr{row.entries === 1 ? 'y' : 'ies'} · {billHrs}h billable</div>
+                          </div>
+                          <span className="ml-2 rounded-md bg-accent px-2 py-1 text-sm font-bold">{hrs}h</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {/* By Task / Subtask roll-up */}
+              {rollup && rollup.byTask.length > 1 && (
+                <div className="rounded-md border border-border">
+                  <div className="border-b border-border bg-accent/20 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">By Task / Subtask</div>
+                  <ul className="divide-y divide-border">
+                    {rollup.byTask.map((row) => (
+                      <li key={row.taskId} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium">{row.title || '(untitled)'}</span>
+                          {row.isParent && <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">Parent</span>}
+                          <div className="text-[11px] text-muted-foreground">{row.entries} entr{row.entries === 1 ? 'y' : 'ies'}</div>
+                        </div>
+                        <span className="ml-2 rounded-md bg-accent px-2 py-1 text-sm font-bold">{(row.minutes / 60).toFixed(1)}h</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Log Time Form */}
               {canLogTime && (
@@ -1361,28 +1549,37 @@ function TaskDetailPanel({
                 </>
               )}
 
-              {/* Time Logs List */}
+              {/* Time Logs List — pulled from the parent-plus-subtask roll-up when available */}
               <div className="space-y-2">
-                {timeLogs.length > 0 && <div className="text-[13px] font-medium text-muted-foreground">Time Entries</div>}
-                {timeLogs.map((tl) => {
+                {(rollup?.entries.length ?? timeLogs.length) > 0 && (
+                  <div className="text-[13px] font-medium text-muted-foreground">Time Entries (parent + subtasks)</div>
+                )}
+                {(rollup?.entries ?? timeLogs).map((tl) => {
                   const dur = tl.durationMinutes ? `${Math.floor(tl.durationMinutes / 60)}h ${tl.durationMinutes % 60}m` : '—';
+                  const fromSubtask = (tl as { taskId?: string }).taskId && (tl as { taskId?: string }).taskId !== task.id;
+                  const subTitle = (tl as { taskTitle?: string }).taskTitle;
                   return (
                     <div key={tl.id} className="flex items-center justify-between rounded-md border border-border p-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 text-sm font-medium">
-                          <span>{userMap[tl.userId] || 'Unknown'}</span>
+                          <span>{userMap[tl.userId] || (tl as { userName?: string | null }).userName || 'Unknown'}</span>
                           {tl.isBillable && <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] text-green-700 dark:bg-green-900/30 dark:text-green-300">Billable</span>}
+                          {fromSubtask && subTitle && (
+                            <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] text-muted-foreground" title={subTitle}>↳ {subTitle.length > 30 ? subTitle.slice(0, 30) + '…' : subTitle}</span>
+                          )}
                         </div>
                         <div className="mt-0.5 text-xs text-muted-foreground">
                           {new Date(tl.startedAt).toLocaleDateString('en-IN')}
                         </div>
-                        {tl.notes && <p className="mt-1 text-xs text-muted-foreground italic">{tl.notes}</p>}
+                        {tl.notes && <p className="mt-1 text-xs italic text-muted-foreground">{tl.notes}</p>}
                       </div>
                       <span className="ml-2 rounded-md bg-accent px-3 py-1.5 text-sm font-bold">{dur}</span>
                     </div>
                   );
                 })}
-                {timeLogs.length === 0 && <p className="py-6 text-center text-xs text-muted-foreground">No time entries logged yet</p>}
+                {(rollup?.entries.length ?? timeLogs.length) === 0 && (
+                  <p className="py-6 text-center text-xs text-muted-foreground">No time entries logged yet</p>
+                )}
               </div>
             </div>
           )}
@@ -1401,7 +1598,11 @@ function TaskDetailPanel({
                       'task.status_changed': 'Status changed',
                       'task.resolution_added': 'Resolution updated',
                       'task.deleted': 'Deleted task',
+                      'subtask.reordered': 'Subtasks reordered',
                     };
+                    // Mark events that originated from a subtask so the user
+                    // can tell parent vs subtask activity apart in the timeline.
+                    const fromSubtask = h.entityType === 'task' && h.entityId !== task.id;
                     const actorName = h.userId ? (userMap[h.userId] || 'Someone') : 'System';
                     // Compute diff display
                     const before = (h.beforeJson || {}) as Record<string, unknown>;
@@ -1426,6 +1627,9 @@ function TaskDetailPanel({
                             <div className="text-sm">
                               <span className="font-semibold text-foreground">{actorName}</span>
                               <span className="ml-1 text-muted-foreground">— {actionLabel[h.action] || h.action}</span>
+                              {fromSubtask && (
+                                <span className="ml-2 rounded bg-accent px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground" title="Activity came from a subtask">subtask</span>
+                              )}
                             </div>
                             <span className="text-[10.5px] text-muted-foreground">{new Date(h.createdAt).toLocaleString('en-IN')}</span>
                           </div>

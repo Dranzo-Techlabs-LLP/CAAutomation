@@ -1,11 +1,20 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ServiceCatalog } from '../services-catalog/service-catalog.entity';
+import { Task } from '../tasks/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 import { User } from '../users/user.entity';
 import { CreateTimeLogDto } from './dto/create-time-log.dto';
 import { TimeLog } from './time-log.entity';
+
+export interface TaskTimeRollup {
+  totalMinutes: number;
+  billableMinutes: number;
+  byAssignee: { userId: string | null; userName: string | null; minutes: number; billableMinutes: number; entries: number }[];
+  byTask: { taskId: string; title: string; isParent: boolean; minutes: number; entries: number }[];
+  entries: (TimeLog & { taskTitle?: string; userName?: string | null })[];
+}
 
 @Injectable()
 export class TimeLogsService {
@@ -16,6 +25,8 @@ export class TimeLogsService {
     private readonly serviceRepository: Repository<ServiceCatalog>,
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
+    @InjectRepository(Task)
+    private readonly taskRepository: Repository<Task>,
     private readonly tasksService: TasksService,
   ) {}
 
@@ -59,5 +70,90 @@ export class TimeLogsService {
   async listForTask(firmId: string, taskId: string): Promise<TimeLog[]> {
     await this.tasksService.getEntityOrFail(firmId, taskId);
     return this.timeLogRepository.find({ where: { firmId, taskId }, order: { startedAt: 'DESC' } });
+  }
+
+  /**
+   * Returns time logs for a parent task plus every subtask, grouped by
+   * assignee and by task. Used by the task drawer's Efforts roll-up.
+   */
+  async rollupForTask(firmId: string, taskId: string): Promise<TaskTimeRollup> {
+    const parent = await this.tasksService.getEntityOrFail(firmId, taskId);
+    const subs = await this.taskRepository.find({
+      where: { firmId, parentTaskId: taskId },
+      select: ['id', 'title'],
+    });
+    const taskIds = [parent.id, ...subs.map((s) => s.id)];
+    const taskTitleById = new Map<string, string>([
+      [parent.id, parent.title],
+      ...subs.map((s) => [s.id, s.title] as [string, string]),
+    ]);
+    const logs = taskIds.length
+      ? await this.timeLogRepository.find({
+          where: { firmId, taskId: In(taskIds) },
+          order: { startedAt: 'DESC' },
+        })
+      : [];
+    const userIds = Array.from(new Set(logs.map((l) => l.userId).filter(Boolean)));
+    const users = userIds.length
+      ? await this.userRepository.find({ where: { firmId, id: In(userIds) }, select: ['id', 'name'] })
+      : [];
+    const userNameById = new Map(users.map((u) => [u.id, u.name]));
+
+    // Group by assignee
+    const byAssigneeMap = new Map<string, { userId: string | null; userName: string | null; minutes: number; billableMinutes: number; entries: number }>();
+    for (const l of logs) {
+      const key = l.userId ?? '__null';
+      let row = byAssigneeMap.get(key);
+      if (!row) {
+        row = {
+          userId: l.userId ?? null,
+          userName: l.userId ? userNameById.get(l.userId) ?? null : null,
+          minutes: 0,
+          billableMinutes: 0,
+          entries: 0,
+        };
+        byAssigneeMap.set(key, row);
+      }
+      const mins = l.durationMinutes ?? 0;
+      row.minutes += mins;
+      if (l.isBillable) row.billableMinutes += mins;
+      row.entries += 1;
+    }
+
+    // Group by task (parent vs each subtask)
+    const byTaskMap = new Map<string, { taskId: string; title: string; isParent: boolean; minutes: number; entries: number }>();
+    for (const tid of taskIds) {
+      byTaskMap.set(tid, {
+        taskId: tid,
+        title: taskTitleById.get(tid) ?? '',
+        isParent: tid === parent.id,
+        minutes: 0,
+        entries: 0,
+      });
+    }
+    let total = 0;
+    let billable = 0;
+    for (const l of logs) {
+      const mins = l.durationMinutes ?? 0;
+      total += mins;
+      if (l.isBillable) billable += mins;
+      const tRow = byTaskMap.get(l.taskId);
+      if (tRow) {
+        tRow.minutes += mins;
+        tRow.entries += 1;
+      }
+    }
+
+    return {
+      totalMinutes: total,
+      billableMinutes: billable,
+      byAssignee: Array.from(byAssigneeMap.values()).sort((a, b) => b.minutes - a.minutes),
+      byTask: Array.from(byTaskMap.values()).sort((a, b) => (a.isParent ? -1 : b.isParent ? 1 : 0)),
+      entries: logs.map((l) => ({
+        ...l,
+        taskTitle: taskTitleById.get(l.taskId) ?? '',
+        userName: l.userId ? userNameById.get(l.userId) ?? null : null,
+      })),
+    };
   }
 }

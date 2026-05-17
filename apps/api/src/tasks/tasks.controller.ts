@@ -108,4 +108,14 @@ export class TasksController {
   ): Promise<TaskResponseDto> {
     return this.tasksService.createSubtask(user.firmId, id, body, user.id);
   }
+
+  @Patch(':id/subtasks/reorder')
+  @Permissions('task.edit')
+  async reorderSubtasks(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { orderedIds: string[] },
+  ): Promise<TaskResponseDto[]> {
+    return this.tasksService.reorderSubtasks(user.firmId, id, body.orderedIds ?? [], user.id);
+  }
 }

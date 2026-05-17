@@ -1,5 +1,16 @@
--- Migration: add tasks.review_comments column + new scoped permissions
+-- Migration: add tasks.review_comments + tasks.sort_order columns + new scoped permissions
 -- Idempotent: safe to run multiple times.
+
+-- 0. Add tasks.sort_order column (used to order subtasks under their parent)
+SET @col_exists := (
+  SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tasks' AND COLUMN_NAME = 'sort_order'
+);
+SET @sql := IF(@col_exists = 0,
+  'ALTER TABLE tasks ADD COLUMN sort_order INT NOT NULL DEFAULT 0',
+  'SELECT "tasks.sort_order already present" AS info'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 1. Add review_comments column to tasks (no-op if already present)
 SET @col_exists := (

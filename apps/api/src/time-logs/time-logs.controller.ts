@@ -27,4 +27,10 @@ export class TimeLogsController {
   async listForTask(@CurrentUser() user: RequestUser, @Param('taskId') taskId: string): Promise<TimeLog[]> {
     return this.timeLogsService.listForTask(user.firmId, taskId);
   }
+
+  @Get('task/:taskId/rollup')
+  @Permissions('time_log.view')
+  async rollupForTask(@CurrentUser() user: RequestUser, @Param('taskId') taskId: string) {
+    return this.timeLogsService.rollupForTask(user.firmId, taskId);
+  }
 }

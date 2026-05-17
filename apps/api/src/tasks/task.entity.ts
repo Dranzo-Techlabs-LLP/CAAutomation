@@ -113,4 +113,8 @@ export class Task extends TenantAuditColumns {
 
   @Column({ name: 'invoice_id', type: 'varchar', length: 36, nullable: true })
   invoiceId?: string | null;
+
+  // Position of this task among its siblings (used for subtask ordering).
+  @Column({ name: 'sort_order', type: 'int', default: 0 })
+  sortOrder!: number;
 }
