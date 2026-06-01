@@ -100,6 +100,12 @@ export class UsersController {
     return this.usersService.listForFirm(user.firmId);
   }
 
+  @Get('lookup')
+  async lookup(@CurrentUser() user: RequestUser): Promise<{ id: string; name: string }[]> {
+    const users = await this.usersService.listForFirm(user.firmId);
+    return users.map((u) => ({ id: u.id, name: u.name }));
+  }
+
   @Get(':id')
   @Permissions('user.view')
   async getOne(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<UserResponseDto> {

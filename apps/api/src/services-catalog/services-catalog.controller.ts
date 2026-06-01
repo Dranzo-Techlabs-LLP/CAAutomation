@@ -24,6 +24,12 @@ export class ServicesCatalogController {
     return this.servicesCatalogService.list(user.firmId);
   }
 
+  @Get('lookup')
+  async lookup(@CurrentUser() user: RequestUser): Promise<{ id: string; name: string }[]> {
+    const services = await this.servicesCatalogService.list(user.firmId);
+    return services.map((s) => ({ id: s.id, name: s.name }));
+  }
+
   @Post()
   @Permissions('service.create')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateServiceCatalogDto): Promise<ServiceCatalog> {

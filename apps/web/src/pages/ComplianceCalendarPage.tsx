@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Filter, X, Users, Briefcase, UserCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
 
 interface CalTask {
   id: string;
@@ -81,6 +82,9 @@ interface GroupModalState {
 }
 
 export default function ComplianceCalendarPage() {
+  const { hasPermission } = useAuth();
+  const canSeeAllStaff = hasPermission('task.view_all');
+
   const [tasks, setTasks] = useState<CalTask[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string }[]>([]);
@@ -117,8 +121,8 @@ export default function ComplianceCalendarPage() {
   useEffect(() => {
     loadTasks();
     api<{ id: string; name: string }[]>('/customers').then(setCustomers).catch(() => {});
-    api<{ id: string; name: string }[]>('/users').then(setUsers).catch(() => setUsers([]));
-    api<{ id: string; name: string }[]>('/services-catalog').then(setServices).catch(() => setServices([]));
+    api<{ id: string; name: string }[]>('/users/lookup').then(setUsers).catch(() => setUsers([]));
+    api<{ id: string; name: string }[]>('/services-catalog/lookup').then(setServices).catch(() => setServices([]));
   }, [loadTasks]);
 
   const [year, mon] = month.split('-').map(Number);
@@ -308,13 +312,15 @@ export default function ComplianceCalendarPage() {
                 {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
-            <div>
-              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff</label>
-              <select className="input-field" value={filterUserId} onChange={(e) => setFilterUserId(e.target.value)}>
-                <option value="">All Staff</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </div>
+            {canSeeAllStaff && (
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff</label>
+                <select className="input-field" value={filterUserId} onChange={(e) => setFilterUserId(e.target.value)}>
+                  <option value="">All Staff</option>
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Status</label>
               <div className="flex flex-wrap gap-1">
