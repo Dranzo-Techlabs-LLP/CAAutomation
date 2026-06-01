@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayNotEmpty, IsUUID } from 'class-validator';
+import { IsArray, IsUUID } from 'class-validator';
 
 export class SetRolePermissionsDto {
   @ApiProperty({ type: [String] })
-  @ArrayNotEmpty()
-  @IsUUID('4', { each: true })
+  @IsArray()
+  @IsUUID('all', { each: true })
   permissionIds!: string[];
 }

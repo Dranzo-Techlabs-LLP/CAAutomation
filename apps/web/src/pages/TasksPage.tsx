@@ -141,6 +141,7 @@ export default function TasksPage() {
   const canCreate = hasPermission('task.create');
   const canEdit = hasPermission('task.edit');
   const canViewAll = hasPermission('task.view');
+  const canSeeAllStaff = hasPermission('task.view_all');
   // Allow commenting/attaching/time-logging if user has specific permission OR general task.edit
   const canComment = hasPermission('task.comment') || hasPermission('task.edit');
   const canAttach = hasPermission('attachment.create') || hasPermission('task.edit');
@@ -381,7 +382,7 @@ export default function TasksPage() {
       )}
 
       {/* Filters */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className={`grid grid-cols-2 gap-2 ${canSeeAllStaff ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
         <select className="input-field text-xs" value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">All Status ({tasks.length})</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')} ({tasks.filter((t) => t.status === s).length})</option>)}
@@ -390,10 +391,12 @@ export default function TasksPage() {
           <option value="">All Clients</option>
           {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
-        <select className="input-field text-xs" value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
-          <option value="">All Staff</option>
-          {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-        </select>
+        {canSeeAllStaff && (
+          <select className="input-field text-xs" value={filterUser} onChange={(e) => setFilterUser(e.target.value)}>
+            <option value="">All Staff</option>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        )}
         <select className="input-field text-xs" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
           <option value="">All Priority</option>
           {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
