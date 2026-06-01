@@ -1,0 +1,244 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      deploy_target:
+        description: Which tenant to deploy
+        type: choice
+        required: true
+        default: both
+        options: [ca, bm, both]
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 20
+  PNPM_VERSION: 10
+
+jobs:
+  build:
+    name: Build artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      zip_name: ${{ steps.bundle.outputs.zip_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build API
+        run: pnpm --filter './apps/api' build
+
+      - name: Build Web
+        run: pnpm --filter './apps/web' build
+
+      - name: Assemble bundle
+        id: bundle
+        run: |
+          set -e
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          ZIP="DeskHub-Update-${{ github.run_number }}-${SHORT_SHA}.zip"
+          mkdir -p out/api out/web
+          cp -R apps/api/dist out/api/dist
+          cp    apps/api/package.json out/api/package.json
+          cp -R apps/web/dist/. out/web/
+          cp    scripts/migrate-review-comments-and-scoped-perms.sql out/migrate.sql
+          (cd out && zip -rq "../${ZIP}" .)
+          ls -lh "${ZIP}"
+          echo "zip_name=${ZIP}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-bundle
+          path: DeskHub-Update-*.zip
+          retention-days: 30
+
+  deploy-ca:
+    name: Deploy ca.thebusinessmirror.com
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'workflow_dispatch' && (inputs.deploy_target == 'ca' || inputs.deploy_target == 'both'))
+    concurrency:
+      group: deploy-ca-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy-bundle
+
+      - name: SCP zip to /home/ca/public_html/
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}
+          source:   "DeskHub-Update-*.zip"
+          target:   "/home/ca/public_html/"
+
+      - name: SSH deploy ca-prod
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: DB_HOST,DB_USER,DB_PASSWORD
+          script: |
+            set -e
+            ZIP=$(ls -t /home/ca/public_html/DeskHub-Update-*.zip | head -1)
+            echo "Deploying $ZIP"
+
+            # Run migration (idempotent — safe to re-run every deploy)
+            unzip -p "$ZIP" migrate.sql > /tmp/migrate-ca.sql
+            mysql -h "${{ secrets.DB_HOST }}" -u "${{ secrets.DB_USER }}" -p"${{ secrets.DB_PASSWORD }}" tbmca < /tmp/migrate-ca.sql || true
+            rm -f /tmp/migrate-ca.sql
+
+            # Extract
+            rm -rf /home/ca/tmp-update
+            mkdir -p /home/ca/tmp-update && cd /home/ca/tmp-update
+            unzip -o "$ZIP"
+            test -f api/dist/main.js
+
+            # Backup current dist (for fast rollback if needed)
+            BACKUP_DIR=/home/ca/backups
+            mkdir -p "$BACKUP_DIR"
+            TS=$(date +%Y%m%d-%H%M%S)
+            tar czf "$BACKUP_DIR/api-dist-$TS.tgz" -C /home/ca/public_html/api dist 2>/dev/null || true
+
+            # Swap API
+            rm -rf /home/ca/public_html/api/dist
+            cp -R /home/ca/tmp-update/api/dist /home/ca/public_html/api/dist
+            cp    /home/ca/tmp-update/api/package.json /home/ca/public_html/api/package.json
+            cp    /home/ca/tmp-update/api/package.json /home/ca/public_html/package.json
+
+            # Swap web static at ROOT (Apache DocRoot)
+            rm -rf /home/ca/public_html/assets
+            cp -R /home/ca/tmp-update/web/. /home/ca/public_html/
+
+            # Apply trust-proxy patch
+            sed -i "s|app.use(helmet|app.set('trust proxy', 1);\n  app.use(helmet|" /home/ca/public_html/api/dist/main.js
+            grep -q "trust proxy" /home/ca/public_html/api/dist/main.js
+
+            # Restart PM2
+            cd /home/ca/public_html
+            pm2 restart ca-prod --update-env
+
+            # Wait + verify
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              sleep 3
+              if curl -fsS http://127.0.0.1:3006/health >/dev/null 2>&1; then
+                echo "Health OK after ${i}*3s"; break
+              fi
+            done
+            curl -fsS http://127.0.0.1:3006/health
+            echo
+            curl -fsS -X POST http://127.0.0.1:3006/api/v1/auth/login \
+              -H 'Content-Type: application/json' \
+              -d '{"email":"admin@tbm.local","password":"Admin@2025"}' \
+              -o /dev/null -w "auth HTTP=%{http_code}\n"
+
+            # Cleanup
+            cd ~
+            rm -rf /home/ca/tmp-update
+
+            # Keep only last 5 backups
+            ls -1t "$BACKUP_DIR"/api-dist-*.tgz 2>/dev/null | tail -n +6 | xargs -r rm -f
+
+  deploy-bm:
+    name: Deploy gst.thebusinessmirror.com
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || (github.event_name == 'workflow_dispatch' && (inputs.deploy_target == 'bm' || inputs.deploy_target == 'both'))
+    concurrency:
+      group: deploy-bm-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deploy-bundle
+
+      - name: SCP zip to /home/businessmirror/public_html/
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}
+          source:   "DeskHub-Update-*.zip"
+          target:   "/home/businessmirror/public_html/"
+
+      - name: SSH deploy bm-prod
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            ZIP=$(ls -t /home/businessmirror/public_html/DeskHub-Update-*.zip | head -1)
+            echo "Deploying $ZIP"
+
+            unzip -p "$ZIP" migrate.sql > /tmp/migrate-bm.sql
+            mysql -h "${{ secrets.DB_HOST }}" -u "${{ secrets.DB_USER }}" -p"${{ secrets.DB_PASSWORD }}" tbmgst < /tmp/migrate-bm.sql || true
+            rm -f /tmp/migrate-bm.sql
+
+            rm -rf /home/businessmirror/tmp-update
+            mkdir -p /home/businessmirror/tmp-update && cd /home/businessmirror/tmp-update
+            unzip -o "$ZIP"
+            test -f api/dist/main.js
+
+            BACKUP_DIR=/home/businessmirror/backups
+            mkdir -p "$BACKUP_DIR"
+            TS=$(date +%Y%m%d-%H%M%S)
+            tar czf "$BACKUP_DIR/api-dist-$TS.tgz" -C /home/businessmirror/public_html/api dist 2>/dev/null || true
+
+            rm -rf /home/businessmirror/public_html/api/dist
+            cp -R /home/businessmirror/tmp-update/api/dist /home/businessmirror/public_html/api/dist
+            cp    /home/businessmirror/tmp-update/api/package.json /home/businessmirror/public_html/api/package.json
+            cp    /home/businessmirror/tmp-update/api/package.json /home/businessmirror/public_html/package.json
+
+            rm -rf /home/businessmirror/public_html/assets
+            cp -R /home/businessmirror/tmp-update/web/. /home/businessmirror/public_html/
+
+            sed -i "s|app.use(helmet|app.set('trust proxy', 1);\n  app.use(helmet|" /home/businessmirror/public_html/api/dist/main.js
+            grep -q "trust proxy" /home/businessmirror/public_html/api/dist/main.js
+
+            chown -R businessmirror:businessmirror /home/businessmirror/public_html
+            chmod 644 /home/businessmirror/public_html/.htaccess /home/businessmirror/public_html/.env 2>/dev/null || true
+
+            cd /home/businessmirror/public_html
+            pm2 restart bm-prod --update-env
+
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              sleep 3
+              if curl -fsS http://127.0.0.1:3008/health >/dev/null 2>&1; then
+                echo "Health OK after ${i}*3s"; break
+              fi
+            done
+            curl -fsS http://127.0.0.1:3008/health
+            echo
+            curl -fsS -X POST http://127.0.0.1:3008/api/v1/auth/login \
+              -H 'Content-Type: application/json' \
+              -d '{"email":"admin@tbm.local","password":"Admin@2025"}' \
+              -o /dev/null -w "auth HTTP=%{http_code}\n"
+
+            cd ~
+            rm -rf /home/businessmirror/tmp-update
+            ls -1t "$BACKUP_DIR"/api-dist-*.tgz 2>/dev/null | tail -n +6 | xargs -r rm -f
