@@ -8,3 +8,4 @@ uploads
 *.log
 *.tsbuildinfo
 ca-automation-deploy.tar.gz
+.playwright-mcp/

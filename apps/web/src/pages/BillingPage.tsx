@@ -38,6 +38,8 @@ interface Invoice {
   status: string;
   notes?: string | null;
   terms?: string | null;
+  followUpDate?: string | null;
+  followUpNote?: string | null;
   lineItems?: LineItem[];
   gstTreatment?: string;
   placeOfSupply?: string | null;
@@ -405,14 +407,67 @@ export default function BillingPage() {
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState<string | null>(null);
 
+  // ── Billing pipeline tabs ──
+  type Tab = 'pending' | 'invoiced' | 'payment';
+  const [tab, setTab] = useState<Tab>('pending');
+  type PendingTask = { taskId: string; title: string; customerId: string; customerName: string; serviceId: string | null; serviceName: string | null; completedAt: string | null; estimatedHours: string | null; suggestedAmountPaise: string | null };
+  type DueInvoice = Invoice & { paidPaise: number; balancePaise: number; customerName: string };
+  const [pending, setPending] = useState<PendingTask[]>([]);
+  const [due, setDue] = useState<DueInvoice[]>([]);
+  const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
+  const [followUp, setFollowUp] = useState<DueInvoice | null>(null);
+  const [followForm, setFollowForm] = useState({ date: '', note: '', assignToUserId: '' });
+
   const load = () => api<Invoice[]>('/invoices').then(setInvoices).catch(() => {});
+  const loadPending = () => api<PendingTask[]>('/invoices-pending').then(setPending).catch(() => setPending([]));
+  const loadDue = () => api<DueInvoice[]>('/payment-pending').then(setDue).catch(() => setDue([]));
 
   useEffect(() => {
-    load();
+    load(); loadPending(); loadDue();
     api<{ id: string; name: string; gstin?: string | null; address?: string | null; pan?: string | null }[]>('/customers').then(setCustomers).catch(() => {});
     api<ServiceOption[]>('/services-catalog').then(setServices).catch(() => {});
     api<FirmSettings>('/settings').then(setFirm).catch(() => {});
+    api<{ id: string; name: string }[]>('/users/lookup').then(setStaff).catch(() => setStaff([]));
   }, []);
+
+  // Prefill the create-invoice form from a completed-but-unbilled task.
+  const createFromPending = (p: PendingTask) => {
+    const rate = p.suggestedAmountPaise || '';
+    setForm({
+      customerId: p.customerId,
+      issueDate: new Date().toISOString().slice(0, 10),
+      dueDate: new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10),
+      notes: '', terms: '', gstTreatment: 'regular', placeOfSupply: '', reverseCharge: false,
+      tdsRate: '', tdsSection: '',
+      lineItems: [{
+        serviceId: p.serviceId || '', description: p.title,
+        quantity: '1', rate, amount: rate, hsnSac: '', gstRate: '18',
+      }],
+    });
+    setShowForm(true);
+    setTab('invoiced');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const submitFollowUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!followUp) return;
+    try {
+      await api(`/invoices/${followUp.id}/follow-up`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          date: followForm.date,
+          note: followForm.note || undefined,
+          assignToUserId: followForm.assignToUserId || undefined,
+        }),
+      });
+      setFollowUp(null);
+      setFollowForm({ date: '', note: '', assignToUserId: '' });
+      loadDue();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to set follow-up');
+    }
+  };
 
   const addLine = () => setForm({ ...form, lineItems: [...form.lineItems, { serviceId: '', description: '', quantity: '1', rate: '', amount: '', hsnSac: '', gstRate: '18' }] });
 
@@ -573,6 +628,23 @@ export default function BillingPage() {
             {showForm ? 'Cancel' : 'Create Invoice'}
           </button>
         )}
+      </div>
+
+      {/* Pipeline tabs */}
+      <div className="flex gap-1 border-b border-border">
+        {([
+          ['pending', `Invoice Pending${pending.length ? ` (${pending.length})` : ''}`],
+          ['invoiced', 'Invoiced'],
+          ['payment', `Payment Pending${due.length ? ` (${due.length})` : ''}`],
+        ] as [Tab, string][]).map(([k, lbl]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${tab === k ? 'border-b-2 border-primary text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            {lbl}
+          </button>
+        ))}
       </div>
 
       {showForm && (
@@ -778,6 +850,41 @@ export default function BillingPage() {
         </form>
       )}
 
+      {/* STAGE 1 — Invoice Pending (completed, not yet invoiced) */}
+      {tab === 'pending' && (
+        <div className="panel overflow-x-auto">
+          <div className="mb-2 text-xs text-muted-foreground">Work completed and awaiting invoice — generated automatically from completed billable tasks.</div>
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="text-xs uppercase text-muted-foreground">
+              <tr><th className="py-2">Task</th><th>Customer</th><th>Service</th><th>Completed</th><th>Suggested</th><th>Actions</th></tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {pending.map((p) => (
+                <tr key={p.taskId} className="hover:bg-accent/30">
+                  <td className="py-3 font-medium">{p.title}</td>
+                  <td>{p.customerName}</td>
+                  <td className="text-xs">{p.serviceName || '-'}</td>
+                  <td className="text-xs">{p.completedAt ? new Date(p.completedAt).toLocaleDateString('en-IN') : '-'}</td>
+                  <td className="font-mono text-xs tabular-nums">{p.suggestedAmountPaise ? formatPaise(p.suggestedAmountPaise) : '—'}</td>
+                  <td>
+                    {canCreate && (
+                      <button className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-white hover:bg-primary/90" onClick={() => createFromPending(p)}>
+                        Create Invoice
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {pending.length === 0 && (
+                <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">Nothing pending — every completed task is invoiced 🎉</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* STAGE 2 — Invoiced */}
+      {tab === 'invoiced' && (
       <div className="panel overflow-x-auto">
         <table className="w-full min-w-[800px] text-left text-sm">
           <thead className="text-xs uppercase text-muted-foreground">
@@ -834,6 +941,56 @@ export default function BillingPage() {
           </tbody>
         </table>
       </div>
+      )}
+
+      {/* STAGE 3 — Payment Pending (outstanding) */}
+      {tab === 'payment' && (
+        <div className="panel overflow-x-auto">
+          <div className="mb-2 text-xs text-muted-foreground">Invoiced but not fully paid. Record payments, or set a call-back follow-up that lands in the accountant's task view.</div>
+          <table className="w-full min-w-[860px] text-left text-sm">
+            <thead className="text-xs uppercase text-muted-foreground">
+              <tr><th className="py-2">Invoice #</th><th>Customer</th><th>Due</th><th>Total</th><th>Paid</th><th>Balance</th><th>Follow-up</th><th>Actions</th></tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {due.map((inv) => {
+                const overdue = new Date(inv.dueDate) < new Date();
+                return (
+                  <tr key={inv.id} className="hover:bg-accent/30">
+                    <td className="py-3 font-mono text-xs font-medium">{inv.invoiceNo}</td>
+                    <td>{inv.customerName}</td>
+                    <td className={`text-xs ${overdue ? 'font-semibold text-red-600' : ''}`}>{new Date(inv.dueDate).toLocaleDateString('en-IN')}</td>
+                    <td className="font-mono text-xs tabular-nums">{formatPaise(inv.total)}</td>
+                    <td className="font-mono text-xs tabular-nums text-green-700 dark:text-green-400">{formatPaise(inv.paidPaise)}</td>
+                    <td className="font-mono text-xs font-semibold tabular-nums">{formatPaise(inv.balancePaise)}</td>
+                    <td className="text-xs">
+                      {inv.followUpDate
+                        ? <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">{new Date(inv.followUpDate).toLocaleDateString('en-IN')}</span>
+                        : <span className="text-muted-foreground">—</span>}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        {canPay && (
+                          <button className="text-xs text-primary hover:underline" onClick={() => { setPayingId(inv.id); setPayForm({ amount: String(inv.balancePaise), mode: 'upi', referenceNo: '' }); }}>
+                            Record Payment
+                          </button>
+                        )}
+                        {canPay && (
+                          <button className="text-xs text-amber-700 hover:underline dark:text-amber-400" onClick={() => { setFollowUp(inv); setFollowForm({ date: inv.followUpDate || new Date(Date.now()+864e5).toISOString().slice(0,10), note: inv.followUpNote || '', assignToUserId: '' }); }}>
+                            {inv.followUpDate ? 'Reschedule' : 'Set Follow-up'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {due.length === 0 && (
+                <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No outstanding payments 🎉</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Payment Modal */}
       {payingId && (
@@ -870,6 +1027,46 @@ export default function BillingPage() {
               <button type="button" className="secondary-button" onClick={() => setPayingId(null)}>Cancel</button>
               <button type="button" className="primary-button" onClick={handlePay}>Submit Payment</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Follow-up Modal */}
+      {followUp && (
+        <div className="modal-overlay" onClick={() => setFollowUp(null)} role="dialog" aria-modal="true">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">Collections</span>
+                <h3 className="modal-title">Payment follow-up</h3>
+                <p className="modal-subtitle truncate">{followUp.customerName} · {followUp.invoiceNo} · balance {formatPaise(followUp.balancePaise)}</p>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setFollowUp(null)} aria-label="Close">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={submitFollowUp} className="modal-body space-y-3">
+              <div>
+                <label className="field-label">Call back on *</label>
+                <input type="date" className="input-field" value={followForm.date} onChange={(e) => setFollowForm({ ...followForm, date: e.target.value })} required />
+              </div>
+              <div>
+                <label className="field-label">Assign to</label>
+                <select className="input-field" value={followForm.assignToUserId} onChange={(e) => setFollowForm({ ...followForm, assignToUserId: e.target.value })}>
+                  <option value="">Me (current accountant)</option>
+                  {staff.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="field-label">Note</label>
+                <textarea className="input-field" rows={2} value={followForm.note} onChange={(e) => setFollowForm({ ...followForm, note: e.target.value })} placeholder="e.g. Client asked to call after the 15th" />
+              </div>
+              <p className="text-[11px] text-muted-foreground">A “Call client — payment follow-up” task will appear in the assignee’s Task view on this date.</p>
+              <div className="flex justify-end gap-2">
+                <button type="button" className="secondary-button" onClick={() => setFollowUp(null)}>Cancel</button>
+                <button type="submit" className="primary-button">Save Follow-up</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

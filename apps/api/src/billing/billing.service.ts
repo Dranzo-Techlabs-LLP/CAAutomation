@@ -1,8 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Customer } from '../customers/customer.entity';
 import { Firm } from '../common/entities/firm.entity';
+import { ServiceCatalog } from '../services-catalog/service-catalog.entity';
+import { Task, TaskGeneratedBy, TaskPriority, TaskStatus } from '../tasks/task.entity';
 import { applyRoundOff, rupeesToWords, splitGstForLine, stateCodeFromGstin } from './billing.utils';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreatePaymentAdviceDto } from './dto/create-payment-advice.dto';
@@ -27,6 +29,10 @@ export class BillingService {
     private readonly customerRepository: Repository<Customer>,
     @InjectRepository(Firm)
     private readonly firmRepository: Repository<Firm>,
+    @InjectRepository(Task)
+    private readonly taskRepository: Repository<Task>,
+    @InjectRepository(ServiceCatalog)
+    private readonly serviceRepository: Repository<ServiceCatalog>,
   ) {}
 
   // ── Invoices ──────────────────────────────────────────────────────────────
@@ -146,6 +152,150 @@ export class BillingService {
 
   async listInvoices(firmId: string): Promise<Invoice[]> {
     return this.invoiceRepository.find({ where: { firmId }, order: { issueDate: 'DESC' }, take: 200 });
+  }
+
+  // ── Billing pipeline ────────────────────────────────────────────────────
+
+  /**
+   * Stage 1 — INVOICE PENDING (automatic).
+   * Completed, billable tasks that are not yet on any invoice line item.
+   * These are "work done, awaiting invoice".
+   */
+  async listInvoicePending(firmId: string): Promise<
+    Array<{
+      taskId: string;
+      title: string;
+      customerId: string;
+      customerName: string;
+      serviceId: string | null;
+      serviceName: string | null;
+      completedAt: Date | null;
+      estimatedHours: string | null;
+      suggestedAmountPaise: string | null;
+    }>
+  > {
+    // Tasks already billed = those referenced by an invoice line item.
+    const billedRows = await this.lineItemRepository
+      .createQueryBuilder('li')
+      .innerJoin(Invoice, 'inv', 'inv.id = li.invoice_id AND inv.firm_id = :firmId', { firmId })
+      .select('DISTINCT li.task_id', 'taskId')
+      .where('li.task_id IS NOT NULL')
+      .getRawMany<{ taskId: string }>();
+    const billedTaskIds = new Set(billedRows.map((r) => r.taskId).filter(Boolean));
+
+    const completed = await this.taskRepository.find({
+      where: { firmId, status: TaskStatus.Completed, billable: true },
+      order: { completedAt: 'DESC' },
+      take: 500,
+    });
+    const pending = completed.filter((t) => !billedTaskIds.has(t.id));
+    if (!pending.length) return [];
+
+    const custIds = Array.from(new Set(pending.map((t) => t.customerId).filter(Boolean)));
+    const svcIds = Array.from(new Set(pending.map((t) => t.serviceId).filter(Boolean) as string[]));
+    const custs = custIds.length ? await this.customerRepository.find({ where: { firmId, id: In(custIds) } }) : [];
+    const svcs = svcIds.length ? await this.serviceRepository.find({ where: { firmId, id: In(svcIds) } }) : [];
+    const custName = new Map(custs.map((c) => [c.id, c.name]));
+    const svc = new Map(svcs.map((s) => [s.id, s]));
+
+    return pending.map((t) => {
+      const service = t.serviceId ? svc.get(t.serviceId) : undefined;
+      // Suggested amount: explicit task billing amount, else hours × rate (task → service).
+      let suggested: string | null = t.billingAmount ?? null;
+      if (!suggested) {
+        const ratePaise = Number(t.hourlyRate ?? service?.defaultHourlyRate ?? 0);
+        const hrs = Number(t.estimatedHours ?? 0);
+        if (ratePaise > 0 && hrs > 0) suggested = String(Math.round(ratePaise * hrs));
+      }
+      return {
+        taskId: t.id,
+        title: t.title,
+        customerId: t.customerId,
+        customerName: custName.get(t.customerId) ?? 'Unknown',
+        serviceId: t.serviceId ?? null,
+        serviceName: service?.name ?? null,
+        completedAt: t.completedAt ?? null,
+        estimatedHours: t.estimatedHours ?? null,
+        suggestedAmountPaise: suggested,
+      };
+    });
+  }
+
+  /**
+   * Stage 3 — PAYMENT PENDING.
+   * Invoices that are issued but not fully paid (and not cancelled/draft).
+   * Returns outstanding balance + any collections follow-up set.
+   */
+  async listPaymentPending(firmId: string): Promise<
+    Array<Invoice & { paidPaise: number; balancePaise: number; customerName: string }>
+  > {
+    const open = await this.invoiceRepository.find({
+      where: {
+        firmId,
+        status: In([InvoiceStatus.Sent, InvoiceStatus.PartiallyPaid, InvoiceStatus.Overdue]),
+      },
+      order: { dueDate: 'ASC' },
+      take: 300,
+    });
+    if (!open.length) return [];
+    const custIds = Array.from(new Set(open.map((i) => i.customerId).filter(Boolean)));
+    const custs = custIds.length ? await this.customerRepository.find({ where: { firmId, id: In(custIds) } }) : [];
+    const custName = new Map(custs.map((c) => [c.id, c.name]));
+    const out: Array<Invoice & { paidPaise: number; balancePaise: number; customerName: string }> = [];
+    for (const inv of open) {
+      const paid = await this.totalPaid(inv.id);
+      out.push(Object.assign(inv, {
+        paidPaise: paid,
+        balancePaise: Math.max(0, Number(inv.total) - paid),
+        customerName: custName.get(inv.customerId) ?? 'Unknown',
+      }));
+    }
+    return out;
+  }
+
+  /**
+   * Collections follow-up — record a callback date + note on an unpaid invoice
+   * and generate a task for the accountant on that date so it surfaces in their
+   * Task view.
+   */
+  async setFollowUp(
+    firmId: string,
+    invoiceId: string,
+    dto: { date: string; note?: string; assignToUserId?: string },
+    actorUserId: string,
+  ): Promise<Invoice> {
+    const invoice = await this.invoiceRepository.findOne({ where: { firmId, id: invoiceId } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    invoice.followUpDate = dto.date.slice(0, 10);
+    invoice.followUpNote = dto.note ?? null;
+    invoice.updatedBy = actorUserId;
+    await this.invoiceRepository.save(invoice);
+
+    const assignee = dto.assignToUserId || actorUserId;
+    const custName = invoice.customerNameSnapshot
+      || (await this.customerRepository.findOne({ where: { firmId, id: invoice.customerId } }))?.name
+      || 'client';
+    const due = new Date(dto.date.slice(0, 10) + 'T09:00:00');
+    await this.taskRepository.save(
+      this.taskRepository.create({
+        firmId,
+        customerId: invoice.customerId,
+        serviceId: null,
+        title: `Call client — payment follow-up: ${custName}`,
+        description:
+          `Invoice ${invoice.invoiceNo} (₹${(Number(invoice.total) / 100).toLocaleString('en-IN')}) ` +
+          `payment pending.${dto.note ? ` Note: ${dto.note}` : ''}`,
+        priority: TaskPriority.High,
+        status: assignee ? TaskStatus.Assigned : TaskStatus.Unassigned,
+        assignedToUserId: assignee,
+        dueDate: due,
+        billable: false,
+        generatedBy: TaskGeneratedBy.Manual,
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
+      }),
+    );
+    return invoice;
   }
 
   async getInvoiceWithLineItems(firmId: string, invoiceId: string): Promise<Invoice & { lineItems: InvoiceLineItem[] }> {

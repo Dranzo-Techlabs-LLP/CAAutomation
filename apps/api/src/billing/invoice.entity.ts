@@ -109,4 +109,13 @@ export class Invoice extends TenantAuditColumns {
 
   @Column({ name: 'pdf_url', type: 'varchar', length: 500, nullable: true })
   pdfUrl?: string | null;
+
+  // Collections follow-up: when a client is called for payment and asks to be
+  // contacted later, store the callback date + note. A task is generated for
+  // the accountant on this date (see BillingService.setFollowUp).
+  @Column({ name: 'follow_up_date', type: 'date', nullable: true })
+  followUpDate?: string | null;
+
+  @Column({ name: 'follow_up_note', type: 'varchar', length: 500, nullable: true })
+  followUpNote?: string | null;
 }

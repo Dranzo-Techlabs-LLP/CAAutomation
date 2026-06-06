@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -25,6 +25,32 @@ export class BillingController {
   @Permissions('billing.view')
   async invoices(@CurrentUser() user: RequestUser): Promise<Invoice[]> {
     return this.billingService.listInvoices(user.firmId);
+  }
+
+  // ── Billing pipeline ──
+  // Stage 1: work completed, awaiting invoice (auto-derived from tasks)
+  @Get('invoices-pending')
+  @Permissions('billing.view')
+  async invoicePending(@CurrentUser() user: RequestUser) {
+    return this.billingService.listInvoicePending(user.firmId);
+  }
+
+  // Stage 3: invoiced but not fully paid (outstanding)
+  @Get('payment-pending')
+  @Permissions('billing.view')
+  async paymentPending(@CurrentUser() user: RequestUser) {
+    return this.billingService.listPaymentPending(user.firmId);
+  }
+
+  // Collections follow-up — set callback date + generate accountant task
+  @Patch('invoices/:id/follow-up')
+  @Permissions('payment.create')
+  async setFollowUp(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { date: string; note?: string; assignToUserId?: string },
+  ): Promise<Invoice> {
+    return this.billingService.setFollowUp(user.firmId, id, body, user.id);
   }
 
   @Get('invoices/:id')
