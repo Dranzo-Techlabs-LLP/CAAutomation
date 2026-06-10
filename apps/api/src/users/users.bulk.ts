@@ -92,7 +92,11 @@ export class UsersBulkService {
       costRate?: string | number;
       password?: string;
     };
-    const rows = await parseUpload<Row>({ buffer, columns: userColumns({ roleNames: [] }) });
+    const rows = await parseUpload<Row>({
+      buffer,
+      columns: userColumns({ roleNames: [] }),
+      sheetName: 'Users',
+    });
 
     const firmRoles = await this.roles.find({ where: { firmId } });
     const roleByName = new Map(firmRoles.map((r) => [r.name.toLowerCase(), r]));

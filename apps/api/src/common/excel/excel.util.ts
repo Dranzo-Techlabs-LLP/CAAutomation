@@ -177,11 +177,28 @@ export async function buildTemplate(opts: {
 export async function parseUpload<T extends Record<string, unknown>>(opts: {
   buffer: Buffer;
   columns: ColumnSpec[];
+  /** Preferred data-sheet name; falls back to the first visible non-helper sheet. */
+  sheetName?: string;
 }): Promise<T[]> {
   const wb = new ExcelJS.Workbook();
   // exceljs typings predate Buffer/ArrayBuffer narrowing; cast through unknown.
   await (wb.xlsx.load as unknown as (b: Uint8Array) => Promise<unknown>)(opts.buffer);
-  const ws = wb.worksheets[0];
+  // Templates built by buildTemplate() put hidden lookup sheets (_lk_*) FIRST,
+  // so worksheets[0] is NOT the data sheet. Pick by name, else first visible
+  // sheet that isn't a lookup/Instructions/Columns helper.
+  const helperNames = new Set(['instructions', 'columns']);
+  const isHelper = (s: ExcelJS.Worksheet): boolean =>
+    s.name.startsWith('_lk_') || helperNames.has(s.name.trim().toLowerCase());
+  const candidates = wb.worksheets.filter((s) => !isHelper(s));
+  const ws =
+    (opts.sheetName
+      ? wb.worksheets.find(
+          (s) => s.name.trim().toLowerCase() === opts.sheetName!.trim().toLowerCase(),
+        )
+      : undefined) ??
+    candidates.find((s) => s.state === 'visible') ??
+    candidates[0] ??
+    wb.worksheets[0];
   if (!ws) return [];
 
   // Map header text -> column key
@@ -194,6 +211,15 @@ export async function parseUpload<T extends Record<string, unknown>>(opts: {
     );
     if (match) headerMap.set(colNumber, match.key);
   });
+
+  // Detect the template's example row (row 2) when the user forgot to delete
+  // it: every required column that ships an example still holds that example.
+  const exampleChecks = opts.columns.filter((c) => c.required && c.example !== undefined);
+  const isExampleRow = (obj: Record<string, unknown>): boolean =>
+    exampleChecks.length > 0 &&
+    exampleChecks.every(
+      (c) => String(obj[c.key] ?? '').trim().toLowerCase() === String(c.example).trim().toLowerCase(),
+    );
 
   const out: T[] = [];
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -219,7 +245,7 @@ export async function parseUpload<T extends Record<string, unknown>>(opts: {
       obj[key] = trimmed;
       nonEmpty = true;
     });
-    if (nonEmpty) out.push(obj as T);
+    if (nonEmpty && !isExampleRow(obj)) out.push(obj as T);
   });
   return out;
 }

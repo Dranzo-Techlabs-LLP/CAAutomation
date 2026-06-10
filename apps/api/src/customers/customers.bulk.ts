@@ -106,7 +106,11 @@ export class CustomersBulkService {
       briefText?: string;
       ownerEmail?: string;
     };
-    const rows = await parseUpload<Row>({ buffer, columns: customerColumns({ ownerEmails: [] }) });
+    const rows = await parseUpload<Row>({
+      buffer,
+      columns: customerColumns({ ownerEmails: [] }),
+      sheetName: 'Customers',
+    });
 
     // Preload ACTIVE firm users only — keyed by lowercase email for owner lookup.
     // Inactive users are excluded to avoid creating orphan ownership assignments.
