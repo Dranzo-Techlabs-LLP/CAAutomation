@@ -157,6 +157,8 @@ export default function TasksPage() {
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [logTimeFor, setLogTimeFor] = useState<{ task: Task; targetStatus: string } | null>(null);
   const [logTimeForm, setLogTimeForm] = useState({ hours: '', minutes: '', notes: '' });
+  const [gateLogBusy, setGateLogBusy] = useState(false); // double-submit guard for the close-gate log
+
   const [showForm, setShowForm] = useState(false);
   const [visible, setVisible] = useState<Record<FieldKey, boolean>>(() => loadVisible());
   const [showFieldSettings, setShowFieldSettings] = useState(false);
@@ -173,7 +175,7 @@ export default function TasksPage() {
   const [filterPriority, setFilterPriority] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '' });
+  const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '', billable: true, billingAmount: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -200,7 +202,7 @@ export default function TasksPage() {
     api<TaskStatusDef[]>('/task-statuses').then(setStatuses).catch(() => setStatuses([]));
   }, [load]);
 
-  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '' }); setShowForm(false); setError(''); };
+  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '', billable: true, billingAmount: '' }); setShowForm(false); setError(''); };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
@@ -216,6 +218,12 @@ export default function TasksPage() {
       if (form.clientDueDate) body.clientDueDate = new Date(form.clientDueDate).toISOString();
       if (form.resolution) body.resolution = form.resolution;
       if (form.reviewComments) body.reviewComments = form.reviewComments;
+      // Billable flag + agreed amount (entered in ₹, stored in paise)
+      body.billable = form.billable;
+      if (form.billable && form.billingAmount) {
+        const rupees = Number(form.billingAmount);
+        if (!Number.isNaN(rupees) && rupees > 0) body.billingAmount = String(Math.round(rupees * 100));
+      }
       await api('/tasks', { method: 'POST', body: JSON.stringify(body) });
       resetForm(); load();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to create task'); }
@@ -264,8 +272,10 @@ export default function TasksPage() {
 
   const submitLogTimeAndClose = async () => {
     if (!logTimeFor) return;
+    if (gateLogBusy) return; // double-submit guard
     const totalMin = (Number(logTimeFor && logTimeForm.hours) || 0) * 60 + (Number(logTimeForm.minutes) || 0);
     if (totalMin <= 0) { alert('Enter time spent (hours / minutes)'); return; }
+    setGateLogBusy(true);
     try {
       const now = new Date();
       const start = new Date(now.getTime() - totalMin * 60000);
@@ -284,7 +294,7 @@ export default function TasksPage() {
       setLogTimeForm({ hours: '', minutes: '', notes: '' });
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Failed to log time');
-    }
+    } finally { setGateLogBusy(false); }
   };
 
   const skipLogAndClose = async () => {
@@ -419,6 +429,19 @@ export default function TasksPage() {
             {visible.staffDueDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label><input type="date" className="input-field" value={form.staffDueDate} onChange={(e) => setForm({ ...form, staffDueDate: e.target.value })} /></div>}
             {visible.reviewDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Review Date</label><input type="date" className="input-field" value={form.reviewDate} onChange={(e) => setForm({ ...form, reviewDate: e.target.value })} /></div>}
             {visible.clientDueDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Partner Due Date</label><input type="date" className="input-field" value={form.clientDueDate} onChange={(e) => setForm({ ...form, clientDueDate: e.target.value })} /></div>}
+            <div>
+              <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Billing</label>
+              <select className="input-field" value={form.billable ? 'billable' : 'non_billable'} onChange={(e) => setForm({ ...form, billable: e.target.value === 'billable' })}>
+                <option value="billable">Billable</option>
+                <option value="non_billable">Non-billable</option>
+              </select>
+            </div>
+            {form.billable && (
+              <div>
+                <label className="mb-1 block text-[13px] font-medium text-muted-foreground">Agreed Amount (₹)</label>
+                <input type="number" min="0" step="0.01" className="input-field" placeholder="e.g. 5000 — used as the invoice suggestion" value={form.billingAmount} onChange={(e) => setForm({ ...form, billingAmount: e.target.value })} />
+              </div>
+            )}
           </div>
           {visible.description && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Description</label><textarea className="input-field" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>}
           {visible.resolution && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Resolution</label><textarea className="input-field" rows={2} value={form.resolution} onChange={(e) => setForm({ ...form, resolution: e.target.value })} placeholder="Resolution details (optional)" /></div>}
@@ -631,6 +654,10 @@ function TaskDetailPanel({
   // Time log form
   const [timeForm, setTimeForm] = useState({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true });
   const [showTimeForm, setShowTimeForm] = useState(false);
+  // Time-entry corrections (client ask: double-saved log showed 2h for 1h of work)
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editLogForm, setEditLogForm] = useState({ hours: '', minutes: '' });
+  const [logBusy, setLogBusy] = useState(false);
 
   // Per-subtask quick time-log form
   const [quickLogTarget, setQuickLogTarget] = useState<Subtask | null>(null);
@@ -678,6 +705,7 @@ function TaskDetailPanel({
   const submitQuickLog = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickLogTarget) return;
+    if (logBusy) return; // double-submit guard
     const hrs = parseInt(quickLogForm.hours || '0', 10);
     const mins = parseInt(quickLogForm.minutes || '0', 10);
     if (Number.isNaN(hrs) || Number.isNaN(mins)) { alert('Hours/minutes must be numbers'); return; }
@@ -686,6 +714,7 @@ function TaskDetailPanel({
     const start = new Date(quickLogForm.date + 'T09:00:00');
     if (Number.isNaN(start.getTime())) { alert('Invalid date'); return; }
     const end = new Date(start.getTime() + totalMinutes * 60000);
+    setLogBusy(true);
     try {
       await api('/time-logs', {
         method: 'POST',
@@ -704,7 +733,7 @@ function TaskDetailPanel({
       loadHistory();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to log time');
-    }
+    } finally { setLogBusy(false); }
   };
 
   useEffect(() => {
@@ -815,6 +844,7 @@ function TaskDetailPanel({
 
   const handleTimeLog = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (logBusy) return; // double-submit guard — a double click logged 2h for 1h of work
     const hrs = parseInt(timeForm.hours || '0', 10);
     const mins = parseInt(timeForm.minutes || '0', 10);
     if (hrs === 0 && mins === 0) { alert('Enter duration'); return; }
@@ -822,6 +852,7 @@ function TaskDetailPanel({
     // Build start/end from date + duration
     const startDate = new Date(timeForm.date + 'T09:00:00');
     const endDate = new Date(startDate.getTime() + totalMinutes * 60000);
+    setLogBusy(true);
     try {
       await api('/time-logs', {
         method: 'POST',
@@ -836,7 +867,40 @@ function TaskDetailPanel({
       setTimeForm({ hours: '', minutes: '', date: new Date().toISOString().slice(0, 10), notes: '', isBillable: true });
       setShowTimeForm(false);
       loadTimeLogs();
+      loadRollup();
+      loadHistory();
     } catch (err: unknown) { alert(err instanceof Error ? err.message : 'Failed'); }
+    finally { setLogBusy(false); }
+  };
+
+  // Correct an entry's duration in place (PATCH /time-logs/:id)
+  const saveLogEdit = async (logId: string) => {
+    if (logBusy) return;
+    const hrs = parseInt(editLogForm.hours || '0', 10);
+    const mins = parseInt(editLogForm.minutes || '0', 10);
+    if (hrs === 0 && mins === 0) { alert('Enter duration'); return; }
+    setLogBusy(true);
+    try {
+      await api(`/time-logs/${logId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ durationMinutes: hrs * 60 + mins }),
+      });
+      setEditingLogId(null);
+      loadTimeLogs(); loadRollup(); loadHistory();
+    } catch (err) { alert(err instanceof Error ? err.message : 'Failed to update entry'); }
+    finally { setLogBusy(false); }
+  };
+
+  // Remove a wrong entry (DELETE /time-logs/:id)
+  const deleteLog = async (logId: string) => {
+    if (logBusy) return;
+    if (!window.confirm('Delete this time entry? Hours will be removed from the task effort.')) return;
+    setLogBusy(true);
+    try {
+      await api(`/time-logs/${logId}`, { method: 'DELETE' });
+      loadTimeLogs(); loadRollup(); loadHistory();
+    } catch (err) { alert(err instanceof Error ? err.message : 'Failed to delete entry'); }
+    finally { setLogBusy(false); }
   };
 
   const saveResolution = () => {
@@ -1074,7 +1138,9 @@ function TaskDetailPanel({
                     </div>
                     <div className="rounded-md border border-border p-2.5">
                       <span className="text-[13px] font-medium text-muted-foreground">Total Effort</span>
-                      <p className="mt-0.5 font-medium">{totalHours} hrs ({timeLogs.length} entries)</p>
+                      <p className="mt-0.5 font-medium">
+                        {rollup ? (rollup.totalMinutes / 60).toFixed(1) : totalHours} hrs ({rollup ? rollup.entries.length : timeLogs.length} entries{rollup && rollup.entries.length > timeLogs.length ? ', incl. subtasks' : ''})
+                      </p>
                     </div>
                     <div className="rounded-md border border-border p-2.5">
                       <span className="text-[13px] font-medium text-muted-foreground">Generated By</span>
@@ -1589,7 +1655,32 @@ function TaskDetailPanel({
                         </div>
                         {tl.notes && <p className="mt-1 text-xs italic text-muted-foreground">{tl.notes}</p>}
                       </div>
-                      <span className="ml-2 rounded-md bg-accent px-3 py-1.5 text-sm font-bold">{dur}</span>
+                      {editingLogId === tl.id ? (
+                        <div className="ml-2 flex items-center gap-1.5">
+                          <input type="number" min="0" className="input-field w-16 text-xs" placeholder="hrs" value={editLogForm.hours} onChange={(e) => setEditLogForm({ ...editLogForm, hours: e.target.value })} />
+                          <input type="number" min="0" max="59" className="input-field w-16 text-xs" placeholder="min" value={editLogForm.minutes} onChange={(e) => setEditLogForm({ ...editLogForm, minutes: e.target.value })} />
+                          <button className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-white disabled:opacity-50" disabled={logBusy} onClick={() => saveLogEdit(tl.id)}>Save</button>
+                          <button className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground" onClick={() => setEditingLogId(null)}>Cancel</button>
+                        </div>
+                      ) : (
+                        <div className="ml-2 flex items-center gap-1.5">
+                          <span className="rounded-md bg-accent px-3 py-1.5 text-sm font-bold">{dur}</span>
+                          <button
+                            className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                            title="Correct this entry's duration"
+                            onClick={() => { setEditingLogId(tl.id); setEditLogForm({ hours: String(Math.floor((tl.durationMinutes || 0) / 60)), minutes: String((tl.durationMinutes || 0) % 60) }); }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="rounded-md border border-border px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                            title="Delete this entry"
+                            onClick={() => deleteLog(tl.id)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

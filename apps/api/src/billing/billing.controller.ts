@@ -28,11 +28,12 @@ export class BillingController {
   }
 
   // ── Billing pipeline ──
-  // Stage 1: work completed, awaiting invoice (auto-derived from tasks)
+  // Stage 1: work completed, awaiting invoice (auto-derived from tasks).
+  // ?view=non_billable returns the dismissed/non-billable list instead.
   @Get('invoices-pending')
   @Permissions('billing.view')
-  async invoicePending(@CurrentUser() user: RequestUser) {
-    return this.billingService.listInvoicePending(user.firmId);
+  async invoicePending(@CurrentUser() user: RequestUser, @Query('view') view?: string) {
+    return this.billingService.listInvoicePending(user.firmId, view !== 'non_billable');
   }
 
   // Stage 3: invoiced but not fully paid (outstanding)
@@ -40,6 +41,27 @@ export class BillingController {
   @Permissions('billing.view')
   async paymentPending(@CurrentUser() user: RequestUser) {
     return this.billingService.listPaymentPending(user.firmId);
+  }
+
+  // "No invoice needed" — drop a completed task out of Invoice Pending
+  // (marks it non-billable; e.g. monthly TDS payment runs vs the billed quarterly filing)
+  @Patch('invoices-pending/:taskId/dismiss')
+  @Permissions('invoice.create')
+  async dismissInvoicePending(
+    @CurrentUser() user: RequestUser,
+    @Param('taskId') taskId: string,
+  ): Promise<{ taskId: string; billable: boolean }> {
+    return this.billingService.dismissInvoicePending(user.firmId, taskId, user.id);
+  }
+
+  // Undo — pull a dismissed task back into Invoice Pending
+  @Patch('invoices-pending/:taskId/restore')
+  @Permissions('invoice.create')
+  async restoreInvoicePending(
+    @CurrentUser() user: RequestUser,
+    @Param('taskId') taskId: string,
+  ): Promise<{ taskId: string; billable: boolean }> {
+    return this.billingService.restoreInvoicePending(user.firmId, taskId, user.id);
   }
 
   // Collections follow-up — set callback date + generate accountant task

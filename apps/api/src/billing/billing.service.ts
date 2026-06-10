@@ -160,8 +160,11 @@ export class BillingService {
    * Stage 1 — INVOICE PENDING (automatic).
    * Completed, billable tasks that are not yet on any invoice line item.
    * These are "work done, awaiting invoice".
+   * With billable=false it returns the NON-BILLABLE list instead — completed
+   * work explicitly excluded from invoicing (visible + reversible, per client
+   * request: non-billable work should still show as a list in the invoicing window).
    */
-  async listInvoicePending(firmId: string): Promise<
+  async listInvoicePending(firmId: string, billable = true): Promise<
     Array<{
       taskId: string;
       title: string;
@@ -184,7 +187,7 @@ export class BillingService {
     const billedTaskIds = new Set(billedRows.map((r) => r.taskId).filter(Boolean));
 
     const completed = await this.taskRepository.find({
-      where: { firmId, status: TaskStatus.Completed, billable: true },
+      where: { firmId, status: TaskStatus.Completed, billable },
       order: { completedAt: 'DESC' },
       take: 500,
     });
@@ -219,6 +222,38 @@ export class BillingService {
         suggestedAmountPaise: suggested,
       };
     });
+  }
+
+  /**
+   * Dismiss an Invoice Pending row — "no invoice needed".
+   * Some completed work is internal/ancillary (e.g. monthly TDS *payment*
+   * runs, where only the quarterly *return filing* is billed). Marking the
+   * task non-billable removes it from the pipeline permanently without
+   * faking a zero invoice.
+   */
+  async dismissInvoicePending(firmId: string, taskId: string, actorUserId: string): Promise<{ taskId: string; billable: boolean }> {
+    const task = await this.taskRepository.findOne({ where: { firmId, id: taskId } });
+    if (!task) throw new NotFoundException('Task not found');
+    const billed = await this.lineItemRepository
+      .createQueryBuilder('li')
+      .innerJoin(Invoice, 'inv', 'inv.id = li.invoice_id AND inv.firm_id = :firmId', { firmId })
+      .where('li.task_id = :taskId', { taskId })
+      .getCount();
+    if (billed > 0) throw new BadRequestException('Task is already on an invoice — cannot mark as no-invoice');
+    task.billable = false;
+    task.updatedBy = actorUserId;
+    await this.taskRepository.save(task);
+    return { taskId: task.id, billable: task.billable };
+  }
+
+  /** Undo of dismissInvoicePending — pull a task back into Invoice Pending. */
+  async restoreInvoicePending(firmId: string, taskId: string, actorUserId: string): Promise<{ taskId: string; billable: boolean }> {
+    const task = await this.taskRepository.findOne({ where: { firmId, id: taskId } });
+    if (!task) throw new NotFoundException('Task not found');
+    task.billable = true;
+    task.updatedBy = actorUserId;
+    await this.taskRepository.save(task);
+    return { taskId: task.id, billable: task.billable };
   }
 
   /**

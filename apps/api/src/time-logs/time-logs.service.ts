@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ServiceCatalog } from '../services-catalog/service-catalog.entity';
@@ -6,6 +6,7 @@ import { Task } from '../tasks/task.entity';
 import { TasksService } from '../tasks/tasks.service';
 import { User } from '../users/user.entity';
 import { CreateTimeLogDto } from './dto/create-time-log.dto';
+import { UpdateTimeLogDto } from './dto/update-time-log.dto';
 import { TimeLog } from './time-log.entity';
 
 export interface TaskTimeRollup {
@@ -70,6 +71,49 @@ export class TimeLogsService {
   async listForTask(firmId: string, taskId: string): Promise<TimeLog[]> {
     await this.tasksService.getEntityOrFail(firmId, taskId);
     return this.timeLogRepository.find({ where: { firmId, taskId }, order: { startedAt: 'DESC' } });
+  }
+
+  /**
+   * Correct a time-log entry (e.g. accidental double-save logged 2h for 1h of
+   * work). Only the person who logged it may change it, unless the actor has
+   * task.edit (supervisor correcting staff entries).
+   */
+  async update(
+    firmId: string,
+    id: string,
+    dto: UpdateTimeLogDto,
+    actorUserId: string,
+    canManageOthers: boolean,
+  ): Promise<TimeLog> {
+    const log = await this.timeLogRepository.findOne({ where: { firmId, id } });
+    if (!log) throw new NotFoundException('Time log not found');
+    if (log.userId !== actorUserId && !canManageOthers) {
+      throw new ForbiddenException('Only the person who logged this time (or a task editor) can change it');
+    }
+    if (dto.durationMinutes !== undefined) {
+      log.durationMinutes = dto.durationMinutes;
+      log.endedAt = new Date(new Date(log.startedAt).getTime() + dto.durationMinutes * 60_000);
+    }
+    if (dto.notes !== undefined) log.notes = dto.notes;
+    if (dto.isBillable !== undefined) log.isBillable = dto.isBillable;
+    log.updatedBy = actorUserId;
+    return this.timeLogRepository.save(log);
+  }
+
+  /** Delete a wrong entry outright (same ownership rule as update). */
+  async remove(
+    firmId: string,
+    id: string,
+    actorUserId: string,
+    canManageOthers: boolean,
+  ): Promise<{ deleted: true }> {
+    const log = await this.timeLogRepository.findOne({ where: { firmId, id } });
+    if (!log) throw new NotFoundException('Time log not found');
+    if (log.userId !== actorUserId && !canManageOthers) {
+      throw new ForbiddenException('Only the person who logged this time (or a task editor) can delete it');
+    }
+    await this.timeLogRepository.remove(log);
+    return { deleted: true };
   }
 
   /**

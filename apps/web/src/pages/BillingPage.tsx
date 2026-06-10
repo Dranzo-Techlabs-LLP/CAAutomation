@@ -417,13 +417,16 @@ export default function BillingPage() {
   const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
   const [followUp, setFollowUp] = useState<DueInvoice | null>(null);
   const [followForm, setFollowForm] = useState({ date: '', note: '', assignToUserId: '' });
+  const [nonBillable, setNonBillable] = useState<PendingTask[]>([]);
+  const [pendingView, setPendingView] = useState<'billable' | 'non_billable'>('billable');
 
   const load = () => api<Invoice[]>('/invoices').then(setInvoices).catch(() => {});
   const loadPending = () => api<PendingTask[]>('/invoices-pending').then(setPending).catch(() => setPending([]));
+  const loadNonBillable = () => api<PendingTask[]>('/invoices-pending?view=non_billable').then(setNonBillable).catch(() => setNonBillable([]));
   const loadDue = () => api<DueInvoice[]>('/payment-pending').then(setDue).catch(() => setDue([]));
 
   useEffect(() => {
-    load(); loadPending(); loadDue();
+    load(); loadPending(); loadNonBillable(); loadDue();
     api<{ id: string; name: string; gstin?: string | null; address?: string | null; pan?: string | null }[]>('/customers').then(setCustomers).catch(() => {});
     api<ServiceOption[]>('/services-catalog').then(setServices).catch(() => {});
     api<FirmSettings>('/settings').then(setFirm).catch(() => {});
@@ -447,6 +450,31 @@ export default function BillingPage() {
     setShowForm(true);
     setTab('invoiced');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // "No invoice needed" — e.g. monthly TDS payment task where only the
+  // quarterly return filing is billed. Marks the task non-billable and
+  // removes it from the pending list.
+  const dismissPending = async (p: PendingTask) => {
+    if (!window.confirm(`Mark "${p.title}" as not requiring an invoice? It will move to the Non-billable list.`)) return;
+    try {
+      await api(`/invoices-pending/${p.taskId}/dismiss`, { method: 'PATCH' });
+      setPending((prev) => prev.filter((x) => x.taskId !== p.taskId));
+      setNonBillable((prev) => [p, ...prev]);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not dismiss');
+    }
+  };
+
+  // Undo — move a non-billable task back into Invoice Pending
+  const restorePending = async (p: PendingTask) => {
+    try {
+      await api(`/invoices-pending/${p.taskId}/restore`, { method: 'PATCH' });
+      setNonBillable((prev) => prev.filter((x) => x.taskId !== p.taskId));
+      setPending((prev) => [p, ...prev]);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not restore');
+    }
   };
 
   const submitFollowUp = async (e: React.FormEvent) => {
@@ -853,7 +881,54 @@ export default function BillingPage() {
       {/* STAGE 1 — Invoice Pending (completed, not yet invoiced) */}
       {tab === 'pending' && (
         <div className="panel overflow-x-auto">
-          <div className="mb-2 text-xs text-muted-foreground">Work completed and awaiting invoice — generated automatically from completed billable tasks.</div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              {pendingView === 'billable'
+                ? 'Work completed and awaiting invoice — generated automatically from completed billable tasks.'
+                : 'Completed work marked as not requiring an invoice (e.g. monthly TDS payment runs). Restore anytime.'}
+            </div>
+            <div className="flex rounded-md border border-border text-xs font-medium">
+              <button
+                className={`px-2.5 py-1 rounded-l-md ${pendingView === 'billable' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-accent'}`}
+                onClick={() => setPendingView('billable')}
+              >
+                Billable{pending.length ? ` (${pending.length})` : ''}
+              </button>
+              <button
+                className={`px-2.5 py-1 rounded-r-md ${pendingView === 'non_billable' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-accent'}`}
+                onClick={() => setPendingView('non_billable')}
+              >
+                Non-billable{nonBillable.length ? ` (${nonBillable.length})` : ''}
+              </button>
+            </div>
+          </div>
+          {pendingView === 'non_billable' ? (
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="text-xs uppercase text-muted-foreground">
+              <tr><th className="py-2">Task</th><th>Customer</th><th>Service</th><th>Completed</th><th>Actions</th></tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {nonBillable.map((p) => (
+                <tr key={p.taskId} className="hover:bg-accent/30">
+                  <td className="py-3 font-medium">{p.title}</td>
+                  <td>{p.customerName}</td>
+                  <td className="text-xs">{p.serviceName || '-'}</td>
+                  <td className="text-xs">{p.completedAt ? new Date(p.completedAt).toLocaleDateString('en-IN') : '-'}</td>
+                  <td>
+                    {canCreate && (
+                      <button className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent" onClick={() => restorePending(p)}>
+                        Mark Billable
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {nonBillable.length === 0 && (
+                <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">No non-billable completed work.</td></tr>
+              )}
+            </tbody>
+          </table>
+          ) : (
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="text-xs uppercase text-muted-foreground">
               <tr><th className="py-2">Task</th><th>Customer</th><th>Service</th><th>Completed</th><th>Suggested</th><th>Actions</th></tr>
@@ -868,9 +943,18 @@ export default function BillingPage() {
                   <td className="font-mono text-xs tabular-nums">{p.suggestedAmountPaise ? formatPaise(p.suggestedAmountPaise) : '—'}</td>
                   <td>
                     {canCreate && (
-                      <button className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-white hover:bg-primary/90" onClick={() => createFromPending(p)}>
-                        Create Invoice
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-white hover:bg-primary/90" onClick={() => createFromPending(p)}>
+                          Create Invoice
+                        </button>
+                        <button
+                          className="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent"
+                          title="This work does not need an invoice — remove it from the pending list"
+                          onClick={() => dismissPending(p)}
+                        >
+                          No Invoice
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -880,6 +964,7 @@ export default function BillingPage() {
               )}
             </tbody>
           </table>
+          )}
         </div>
       )}
 
