@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, IsNull, Repository } from 'typeorm';
 import { Customer } from '../customers/customer.entity';
 import { Firm } from '../common/entities/firm.entity';
 import { ServiceCatalog } from '../services-catalog/service-catalog.entity';
@@ -186,8 +186,12 @@ export class BillingService {
       .getRawMany<{ taskId: string }>();
     const billedTaskIds = new Set(billedRows.map((r) => r.taskId).filter(Boolean));
 
+    // Only PARENT tasks reach billing — a subtask is part of its parent's
+    // deliverable (e.g. "Form 11" parent vs its "Upload", "Download PDF",
+    // "Verify MCA" steps). Billing the engagement once, not each internal
+    // step, prevents a cluttered list and double-billing the same work.
     const completed = await this.taskRepository.find({
-      where: { firmId, status: TaskStatus.Completed, billable },
+      where: { firmId, status: TaskStatus.Completed, billable, parentTaskId: IsNull() },
       order: { completedAt: 'DESC' },
       take: 500,
     });
