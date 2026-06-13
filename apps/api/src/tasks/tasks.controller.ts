@@ -52,6 +52,21 @@ export class TasksController {
     return result;
   }
 
+  // Multi-assign — create one identical task per user in assigneeUserIds.
+  // "Create 1 task, select 15 users" → 15 independent assigned tasks.
+  @Post('bulk')
+  @Permissions('task.create')
+  async createBulk(@CurrentUser() user: RequestUser, @Body() dto: CreateTaskDto): Promise<TaskResponseDto[]> {
+    const results = await this.tasksService.createForAssignees(
+      user.firmId,
+      dto,
+      dto.assigneeUserIds ?? [],
+      user.id,
+    );
+    for (const r of results) this.lifecycle?.onTaskCreated(r.id, user.firmId, user.id);
+    return results;
+  }
+
   @Patch(':id')
   @Permissions('task.edit')
   async update(

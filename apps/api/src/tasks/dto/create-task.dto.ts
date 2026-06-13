@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsISO8601, IsOptional, IsString, IsUUID } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsISO8601, IsOptional, IsString, IsUUID } from 'class-validator';
 import { TaskGeneratedBy, TaskPriority } from '../task.entity';
 
 export class CreateTaskDto {
@@ -50,6 +50,16 @@ export class CreateTaskDto {
   @IsOptional()
   @IsUUID()
   assignedToUserId?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Multi-assign: create one identical task per user id (used by POST /tasks/bulk).',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(100)
+  @IsUUID('all', { each: true })
+  assigneeUserIds?: string[];
 
   @ApiPropertyOptional()
   @IsOptional()

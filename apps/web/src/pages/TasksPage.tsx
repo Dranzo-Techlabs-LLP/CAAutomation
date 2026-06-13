@@ -176,6 +176,8 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [form, setForm] = useState({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '', billable: true, billingAmount: '' });
+  // Multi-assign: pick N users → N identical tasks created (one per user).
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -202,7 +204,7 @@ export default function TasksPage() {
     api<TaskStatusDef[]>('/task-statuses').then(setStatuses).catch(() => setStatuses([]));
   }, [load]);
 
-  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '', billable: true, billingAmount: '' }); setShowForm(false); setError(''); };
+  const resetForm = () => { setForm({ title: '', customerId: '', serviceId: '', priority: 'medium', description: '', assignedToUserId: '', assignedTeamId: '', dueDate: '', staffDueDate: '', reviewDate: '', clientDueDate: '', resolution: '', reviewComments: '', billable: true, billingAmount: '' }); setAssigneeIds([]); setShowForm(false); setError(''); };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
@@ -210,7 +212,6 @@ export default function TasksPage() {
       const body: Record<string, unknown> = { title: form.title, customerId: form.customerId, priority: form.priority };
       if (form.serviceId) body.serviceId = form.serviceId;
       if (form.description) body.description = form.description;
-      if (form.assignedToUserId) body.assignedToUserId = form.assignedToUserId;
       if (form.assignedTeamId) body.assignedTeamId = form.assignedTeamId;
       if (form.dueDate) body.dueDate = new Date(form.dueDate).toISOString();
       if (form.staffDueDate) body.staffDueDate = new Date(form.staffDueDate).toISOString();
@@ -224,7 +225,14 @@ export default function TasksPage() {
         const rupees = Number(form.billingAmount);
         if (!Number.isNaN(rupees) && rupees > 0) body.billingAmount = String(Math.round(rupees * 100));
       }
-      await api('/tasks', { method: 'POST', body: JSON.stringify(body) });
+      // Multi-assign: >1 user → POST /tasks/bulk creates one task per user.
+      if (assigneeIds.length > 1) {
+        const created = await api<unknown[]>('/tasks/bulk', { method: 'POST', body: JSON.stringify({ ...body, assigneeUserIds: assigneeIds }) });
+        alert(`${Array.isArray(created) ? created.length : assigneeIds.length} tasks created — one per selected user.`);
+      } else {
+        if (assigneeIds.length === 1) body.assignedToUserId = assigneeIds[0];
+        await api('/tasks', { method: 'POST', body: JSON.stringify(body) });
+      }
       resetForm(); load();
     } catch (err: unknown) { setError(err instanceof Error ? err.message : 'Failed to create task'); }
   };
@@ -423,7 +431,43 @@ export default function TasksPage() {
             <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Customer *</label><select className="input-field" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required><option value="">Select...</option>{customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
             {visible.serviceId && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Service</label><select className="input-field" value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}><option value="">None</option>{services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
             {visible.priority && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Priority</label><select className="input-field" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>{PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}</select></div>}
-            {visible.assignedToUserId && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to User</label><select className="input-field" value={form.assignedToUserId} onChange={(e) => setForm({ ...form, assignedToUserId: e.target.value })}><option value="">Unassigned</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>}
+            {visible.assignedToUserId && (
+              <div className="sm:col-span-2 lg:col-span-1">
+                <label className="mb-1 flex items-center justify-between text-[13px] font-medium text-muted-foreground">
+                  <span>Assign to Users{assigneeIds.length > 0 ? ` (${assigneeIds.length})` : ''}</span>
+                  {assigneeIds.length > 1 && <span className="text-[11px] font-normal text-primary">{assigneeIds.length} tasks will be created</span>}
+                </label>
+                <div className="max-h-32 overflow-y-auto rounded-md border border-border bg-background p-2 text-sm">
+                  {users.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-muted-foreground">No users</p>
+                  ) : (
+                    <>
+                      <label className="flex cursor-pointer items-center gap-2 border-b border-border px-1 pb-1.5 mb-1 font-medium">
+                        <input
+                          type="checkbox"
+                          className="rounded"
+                          checked={assigneeIds.length === users.length && users.length > 0}
+                          ref={(el) => { if (el) el.indeterminate = assigneeIds.length > 0 && assigneeIds.length < users.length; }}
+                          onChange={(e) => setAssigneeIds(e.target.checked ? users.map((u) => u.id) : [])}
+                        />
+                        Select all
+                      </label>
+                      {users.map((u) => (
+                        <label key={u.id} className="flex cursor-pointer items-center gap-2 px-1 py-1 hover:bg-accent/40 rounded">
+                          <input
+                            type="checkbox"
+                            className="rounded"
+                            checked={assigneeIds.includes(u.id)}
+                            onChange={(e) => setAssigneeIds((prev) => e.target.checked ? [...prev, u.id] : prev.filter((id) => id !== u.id))}
+                          />
+                          {u.name}
+                        </label>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             {visible.assignedTeamId && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Assign to Team</label><select className="input-field" value={form.assignedTeamId} onChange={(e) => setForm({ ...form, assignedTeamId: e.target.value })}><option value="">None</option>{teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>}
             {visible.dueDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Client Due Date</label><input type="date" className="input-field" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} /></div>}
             {visible.staffDueDate && <div><label className="mb-1 block text-[13px] font-medium text-muted-foreground">Staff Due Date</label><input type="date" className="input-field" value={form.staffDueDate} onChange={(e) => setForm({ ...form, staffDueDate: e.target.value })} /></div>}

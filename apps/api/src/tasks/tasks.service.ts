@@ -86,6 +86,29 @@ export class TasksService {
     return this.toResponse(saved);
   }
 
+  /**
+   * Multi-assign create — one independent, identical task per user id.
+   * Each task gets its own subtask materialisation, audit row and lifecycle
+   * hook (fired by the controller). Empty list → a single unassigned task.
+   */
+  async createForAssignees(
+    firmId: string,
+    dto: CreateTaskDto,
+    userIds: string[],
+    actorUserId: string,
+  ): Promise<TaskResponseDto[]> {
+    const ids = Array.from(new Set((userIds ?? []).filter(Boolean)));
+    const base = { ...dto, assigneeUserIds: undefined };
+    if (!ids.length) {
+      return [await this.create(firmId, { ...base, assignedToUserId: undefined }, actorUserId)];
+    }
+    const out: TaskResponseDto[] = [];
+    for (const uid of ids) {
+      out.push(await this.create(firmId, { ...base, assignedToUserId: uid }, actorUserId));
+    }
+    return out;
+  }
+
   async list(
     firmId: string,
     query: PaginationQueryDto,
