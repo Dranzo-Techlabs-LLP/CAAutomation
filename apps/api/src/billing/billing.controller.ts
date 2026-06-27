@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -9,7 +9,7 @@ import { BillingService } from './billing.service';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { CreatePaymentAdviceDto } from './dto/create-payment-advice.dto';
 import { RecordPaymentDto } from './dto/record-payment.dto';
-import { Invoice } from './invoice.entity';
+import { Invoice, InvoiceStatus } from './invoice.entity';
 import { PaymentAdvice, PaymentAdviceType } from './payment-advice.entity';
 import { Payment } from './payment.entity';
 
@@ -81,6 +81,35 @@ export class BillingController {
     return this.billingService.getInvoiceWithLineItems(user.firmId, id);
   }
 
+  // Edit a draft invoice's header (date / notes / terms)
+  @Patch('invoices/:id')
+  @Permissions('invoice.create')
+  async updateInvoice(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { issueDate?: string; dueDate?: string; notes?: string; terms?: string },
+  ): Promise<Invoice> {
+    return this.billingService.updateInvoice(user.firmId, id, body, user.id);
+  }
+
+  // Issue / cancel / un-send an invoice (draft → sent etc.)
+  @Patch('invoices/:id/status')
+  @Permissions('invoice.create')
+  async setInvoiceStatus(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { status: InvoiceStatus },
+  ): Promise<Invoice> {
+    return this.billingService.setInvoiceStatus(user.firmId, id, body.status, user.id);
+  }
+
+  // Delete an invoice (only when no payment recorded)
+  @Delete('invoices/:id')
+  @Permissions('invoice.create')
+  async deleteInvoice(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ deleted: true }> {
+    return this.billingService.deleteInvoice(user.firmId, id, user.id);
+  }
+
   @Post('invoices')
   @Permissions('invoice.create')
   async createInvoice(@CurrentUser() user: RequestUser, @Body() dto: CreateInvoiceDto): Promise<Invoice> {
@@ -127,5 +156,21 @@ export class BillingController {
     @Body() dto: CreatePaymentAdviceDto,
   ): Promise<PaymentAdvice> {
     return this.billingService.createPaymentAdvice(user.firmId, dto, user.id);
+  }
+
+  @Patch('payment-advices/:id')
+  @Permissions('payment.create')
+  async updateAdvice(
+    @CurrentUser() user: RequestUser,
+    @Param('id') id: string,
+    @Body() body: { adviceDate?: string; note?: string; partyName?: string; partyGstin?: string; partyPan?: string; partyAddress?: string },
+  ): Promise<PaymentAdvice> {
+    return this.billingService.updatePaymentAdvice(user.firmId, id, body, user.id);
+  }
+
+  @Delete('payment-advices/:id')
+  @Permissions('payment.create')
+  async deleteAdvice(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ deleted: true }> {
+    return this.billingService.deletePaymentAdvice(user.firmId, id, user.id);
   }
 }

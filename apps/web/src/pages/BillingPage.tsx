@@ -419,6 +419,8 @@ export default function BillingPage() {
   const [followForm, setFollowForm] = useState({ date: '', note: '', assignToUserId: '' });
   const [nonBillable, setNonBillable] = useState<PendingTask[]>([]);
   const [pendingView, setPendingView] = useState<'billable' | 'non_billable'>('billable');
+  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
+  const [editForm, setEditForm] = useState({ issueDate: '', dueDate: '', notes: '', terms: '' });
 
   const load = () => api<Invoice[]>('/invoices').then(setInvoices).catch(() => {});
   const loadPending = () => api<PendingTask[]>('/invoices-pending').then(setPending).catch(() => setPending([]));
@@ -623,6 +625,30 @@ export default function BillingPage() {
       setPayForm({ amount: '', mode: 'upi', referenceNo: '' });
       load();
     } catch {}
+  };
+
+  // Issue a draft (draft → sent) so it enters the payment pipeline.
+  const sendInvoice = async (inv: Invoice) => {
+    try { await api(`/invoices/${inv.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'sent' }) }); load(); loadDue(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not send'); }
+  };
+  const cancelInvoice = async (inv: Invoice) => {
+    if (!window.confirm(`Cancel invoice ${inv.invoiceNo}?`)) return;
+    try { await api(`/invoices/${inv.id}/status`, { method: 'PATCH', body: JSON.stringify({ status: 'cancelled' }) }); load(); loadDue(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not cancel'); }
+  };
+  const deleteInvoice = async (inv: Invoice) => {
+    if (!window.confirm(`Delete invoice ${inv.invoiceNo}? This cannot be undone.`)) return;
+    try { await api(`/invoices/${inv.id}`, { method: 'DELETE' }); load(); loadDue(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not delete'); }
+  };
+  const submitEditInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editInvoice) return;
+    try {
+      await api(`/invoices/${editInvoice.id}`, { method: 'PATCH', body: JSON.stringify(editForm) });
+      setEditInvoice(null); load();
+    } catch (err) { alert(err instanceof Error ? err.message : 'Could not save'); }
   };
 
   const handleDownloadPdf = async (invoiceId: string) => {
@@ -1016,6 +1042,18 @@ export default function BillingPage() {
                         Pay
                       </button>
                     )}
+                    {canCreate && inv.status === 'draft' && (
+                      <>
+                        <button className="text-xs font-medium text-emerald-600 hover:underline" onClick={() => sendInvoice(inv)}>Send</button>
+                        <button className="text-xs text-muted-foreground hover:underline" onClick={() => { setEditInvoice(inv); setEditForm({ issueDate: inv.issueDate.slice(0, 10), dueDate: inv.dueDate.slice(0, 10), notes: (inv as { notes?: string }).notes || '', terms: (inv as { terms?: string }).terms || '' }); }}>Edit</button>
+                      </>
+                    )}
+                    {canCreate && inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                      <button className="text-xs text-muted-foreground hover:underline" onClick={() => cancelInvoice(inv)}>Cancel</button>
+                    )}
+                    {canCreate && (inv.status === 'draft' || inv.status === 'cancelled') && (
+                      <button className="text-xs text-red-600 hover:underline" onClick={() => deleteInvoice(inv)}>Delete</button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -1112,6 +1150,36 @@ export default function BillingPage() {
               <button type="button" className="secondary-button" onClick={() => setPayingId(null)}>Cancel</button>
               <button type="button" className="primary-button" onClick={handlePay}>Submit Payment</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Draft Invoice Modal */}
+      {editInvoice && (
+        <div className="modal-overlay" onClick={() => setEditInvoice(null)} role="dialog" aria-modal="true">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">Draft invoice</span>
+                <h3 className="modal-title">Edit {editInvoice.invoiceNo}</h3>
+                <p className="modal-subtitle">Dates, notes & terms. Amounts are locked — cancel & re-issue to change line items.</p>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setEditInvoice(null)} aria-label="Close">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={submitEditInvoice} className="modal-body space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="field-label">Issue Date</label><input type="date" className="input-field" value={editForm.issueDate} onChange={(e) => setEditForm({ ...editForm, issueDate: e.target.value })} /></div>
+                <div><label className="field-label">Due Date</label><input type="date" className="input-field" value={editForm.dueDate} onChange={(e) => setEditForm({ ...editForm, dueDate: e.target.value })} /></div>
+              </div>
+              <div><label className="field-label">Notes</label><textarea className="input-field" rows={2} value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} /></div>
+              <div><label className="field-label">Terms</label><textarea className="input-field" rows={2} value={editForm.terms} onChange={(e) => setEditForm({ ...editForm, terms: e.target.value })} /></div>
+              <div className="flex justify-end gap-2">
+                <button type="button" className="secondary-button" onClick={() => setEditInvoice(null)}>Cancel</button>
+                <button type="submit" className="primary-button">Save</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

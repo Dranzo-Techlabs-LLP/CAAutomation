@@ -68,6 +68,14 @@ export class RecurrencesService {
     return this.logRepository.find({ where: { recurrenceId: id }, order: { runAt: 'DESC' }, take: 100 });
   }
 
+  /** Delete a recurrence rule + its run logs. Already-generated tasks are kept. */
+  async remove(firmId: string, id: string): Promise<{ deleted: true }> {
+    const recurrence = await this.getOne(firmId, id);
+    await this.logRepository.delete({ recurrenceId: id });
+    await this.recurrenceRepository.remove(recurrence);
+    return { deleted: true };
+  }
+
   async dueRecurrences(now = new Date()): Promise<TaskRecurrence[]> {
     return this.recurrenceRepository.find({
       where: { isActive: true, nextRunAt: LessThanOrEqual(now) },

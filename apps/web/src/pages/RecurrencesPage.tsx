@@ -45,6 +45,11 @@ export default function RecurrencesPage() {
   const [error, setError] = useState('');
 
   const load = () => api<Recurrence[]>('/recurrences').then(setRecurrences).catch(() => {});
+  const deleteRecurrence = async (id: string, name: string) => {
+    if (!window.confirm(`Delete recurrence "${name}"? Already-generated tasks are kept; no new ones will be created.`)) return;
+    try { await api(`/recurrences/${id}`, { method: 'DELETE' }); load(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not delete'); }
+  };
 
   useEffect(() => {
     load();
@@ -195,6 +200,9 @@ export default function RecurrencesPage() {
                     <button className="text-xs text-primary hover:underline" onClick={() => runNow(r.id)}>Run</button>
                   )}
                   <button className="text-xs text-primary hover:underline" onClick={() => viewLog(r.id)}>Log</button>
+                  {canEdit && (
+                    <button className="text-xs text-red-600 hover:underline" onClick={() => deleteRecurrence(r.id, r.name)}>Delete</button>
+                  )}
                 </td>
               </tr>
             ))}

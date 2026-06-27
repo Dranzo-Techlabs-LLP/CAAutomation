@@ -150,6 +150,73 @@ export class BillingService {
     return invoice;
   }
 
+  /**
+   * Edit a DRAFT invoice's header fields (dates / notes / terms). Sent or paid
+   * invoices are immutable — they are legal documents once issued; cancel and
+   * re-issue instead. Line-item / amount edits are intentionally not allowed
+   * here to keep GST totals authoritative.
+   */
+  async updateInvoice(
+    firmId: string,
+    id: string,
+    dto: { issueDate?: string; dueDate?: string; notes?: string; terms?: string },
+    actorUserId: string,
+  ): Promise<Invoice> {
+    const inv = await this.invoiceRepository.findOne({ where: { firmId, id } });
+    if (!inv) throw new NotFoundException('Invoice not found');
+    if (inv.status !== InvoiceStatus.Draft) {
+      throw new BadRequestException('Only draft invoices can be edited. Cancel and re-issue an already-sent invoice.');
+    }
+    if (dto.issueDate) inv.issueDate = dto.issueDate.slice(0, 10);
+    if (dto.dueDate) inv.dueDate = dto.dueDate.slice(0, 10);
+    if (dto.notes !== undefined) inv.notes = dto.notes;
+    if (dto.terms !== undefined) inv.terms = dto.terms;
+    inv.updatedBy = actorUserId;
+    return this.invoiceRepository.save(inv);
+  }
+
+  /**
+   * Change invoice status (issue / cancel). Paid statuses are driven only by
+   * recorded payments, never set here.
+   *   draft  → sent | cancelled
+   *   sent   → cancelled | draft (un-send, if no payments)
+   *   overdue→ cancelled
+   */
+  async setInvoiceStatus(firmId: string, id: string, next: InvoiceStatus, actorUserId: string): Promise<Invoice> {
+    const inv = await this.invoiceRepository.findOne({ where: { firmId, id } });
+    if (!inv) throw new NotFoundException('Invoice not found');
+    if (next === InvoiceStatus.Paid || next === InvoiceStatus.PartiallyPaid) {
+      throw new BadRequestException('Paid status is set automatically when a payment is recorded.');
+    }
+    const allowed: Record<string, InvoiceStatus[]> = {
+      [InvoiceStatus.Draft]: [InvoiceStatus.Sent, InvoiceStatus.Cancelled],
+      [InvoiceStatus.Sent]: [InvoiceStatus.Cancelled, InvoiceStatus.Draft],
+      [InvoiceStatus.Overdue]: [InvoiceStatus.Cancelled],
+      [InvoiceStatus.Cancelled]: [InvoiceStatus.Draft],
+    };
+    if (!(allowed[inv.status] || []).includes(next)) {
+      throw new BadRequestException(`Cannot change status from ${inv.status} to ${next}.`);
+    }
+    if ((next === InvoiceStatus.Cancelled || next === InvoiceStatus.Draft) && (await this.totalPaid(inv.id)) > 0) {
+      throw new BadRequestException('Invoice has recorded payments — refund/clear them before changing status.');
+    }
+    inv.status = next;
+    inv.updatedBy = actorUserId;
+    return this.invoiceRepository.save(inv);
+  }
+
+  /** Delete an invoice. Only when no payment has been recorded. Line items go too. */
+  async deleteInvoice(firmId: string, id: string, _actorUserId: string): Promise<{ deleted: true }> {
+    const inv = await this.invoiceRepository.findOne({ where: { firmId, id } });
+    if (!inv) throw new NotFoundException('Invoice not found');
+    if ((await this.totalPaid(inv.id)) > 0) {
+      throw new BadRequestException('Invoice has recorded payments and cannot be deleted — cancel it instead.');
+    }
+    await this.lineItemRepository.delete({ invoiceId: inv.id });
+    await this.invoiceRepository.remove(inv);
+    return { deleted: true };
+  }
+
   async listInvoices(firmId: string): Promise<Invoice[]> {
     return this.invoiceRepository.find({ where: { firmId }, order: { issueDate: 'DESC' }, take: 200 });
   }
@@ -460,6 +527,32 @@ export class BillingService {
     const advice = await this.paymentAdviceRepository.findOne({ where: { firmId, id } });
     if (!advice) throw new NotFoundException('Payment advice not found');
     return advice;
+  }
+
+  /** Edit a payment advice's editable fields (date, note, party details). */
+  async updatePaymentAdvice(
+    firmId: string,
+    id: string,
+    dto: { adviceDate?: string; note?: string; partyName?: string; partyGstin?: string; partyPan?: string; partyAddress?: string },
+    actorUserId: string,
+  ): Promise<PaymentAdvice> {
+    const advice = await this.paymentAdviceRepository.findOne({ where: { firmId, id } });
+    if (!advice) throw new NotFoundException('Payment advice not found');
+    if (dto.adviceDate) advice.adviceDate = dto.adviceDate.slice(0, 10);
+    if (dto.note !== undefined) (advice as { note?: string | null }).note = dto.note;
+    if (dto.partyName !== undefined) advice.partyName = dto.partyName;
+    if (dto.partyGstin !== undefined) advice.partyGstin = dto.partyGstin;
+    if (dto.partyPan !== undefined) advice.partyPan = dto.partyPan;
+    if (dto.partyAddress !== undefined) advice.partyAddress = dto.partyAddress;
+    advice.updatedBy = actorUserId;
+    return this.paymentAdviceRepository.save(advice);
+  }
+
+  async deletePaymentAdvice(firmId: string, id: string, _actorUserId: string): Promise<{ deleted: true }> {
+    const advice = await this.paymentAdviceRepository.findOne({ where: { firmId, id } });
+    if (!advice) throw new NotFoundException('Payment advice not found');
+    await this.paymentAdviceRepository.remove(advice);
+    return { deleted: true };
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

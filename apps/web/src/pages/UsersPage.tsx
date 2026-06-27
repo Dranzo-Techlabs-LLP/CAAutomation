@@ -64,6 +64,15 @@ export default function UsersPage() {
   const [editError, setEditError] = useState('');
 
   const loadUsers = () => api<UserItem[]>('/users').then(setUsers).catch(() => {});
+  const deactivateUser = async (u: UserItem) => {
+    if (!window.confirm(`Deactivate ${u.name}? They lose access and drop off assignee lists (history is kept).`)) return;
+    try { await api(`/users/${u.id}`, { method: 'DELETE' }); loadUsers(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not deactivate'); }
+  };
+  const reactivateUser = async (u: UserItem) => {
+    try { await api(`/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ isActive: true }) }); loadUsers(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not reactivate'); }
+  };
   const loadRoles = () => api<RoleItem[]>('/roles').then(setRoles).catch(() => {});
 
   useEffect(() => {
@@ -364,6 +373,15 @@ export default function UsersPage() {
                           >
                             Reset Password
                           </button>
+                          {u.isActive ? (
+                            <button className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" onClick={() => deactivateUser(u)}>
+                              Deactivate
+                            </button>
+                          ) : (
+                            <button className="rounded px-2 py-1 text-xs font-medium text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors" onClick={() => reactivateUser(u)}>
+                              Activate
+                            </button>
+                          )}
                         </div>
                       </td>
                     )}

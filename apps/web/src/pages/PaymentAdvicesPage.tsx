@@ -259,6 +259,8 @@ export default function PaymentAdvicesPage() {
 
   const [tab, setTab] = useState<'all' | AdviceType>('all');
   const [advices, setAdvices] = useState<PaymentAdvice[]>([]);
+  const [editAdv, setEditAdv] = useState<PaymentAdvice | null>(null);
+  const [editAdvForm, setEditAdvForm] = useState({ adviceDate: '', partyName: '', note: '' });
   const [customers, setCustomers] = useState<{ id: string; name: string; gstin?: string | null; pan?: string | null; address?: string | null }[]>([]);
   const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
   const [firm, setFirm] = useState<FirmSettings | null>(null);
@@ -283,6 +285,17 @@ export default function PaymentAdvicesPage() {
   });
 
   const load = () => api<PaymentAdvice[]>(tab === 'all' ? '/payment-advices' : `/payment-advices?type=${tab}`).then(setAdvices).catch(() => {});
+  const deleteAdvice = async (a: PaymentAdvice) => {
+    if (!window.confirm(`Delete payment advice ${a.adviceNo}?`)) return;
+    try { await api(`/payment-advices/${a.id}`, { method: 'DELETE' }); load(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not delete'); }
+  };
+  const submitEditAdv = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editAdv) return;
+    try { await api(`/payment-advices/${editAdv.id}`, { method: 'PATCH', body: JSON.stringify(editAdvForm) }); setEditAdv(null); load(); }
+    catch (err) { alert(err instanceof Error ? err.message : 'Could not save'); }
+  };
 
   useEffect(() => { load(); }, [tab]);
   useEffect(() => {
@@ -581,6 +594,8 @@ export default function PaymentAdvicesPage() {
                   <div className="flex items-center gap-2">
                     <button className="text-[11px] font-medium text-primary hover:underline" onClick={() => setViewing(a)}>View</button>
                     <button className="text-[11px] font-medium text-primary hover:underline" onClick={() => generateAdvicePdf(a, firm, a.invoiceId ? invoiceMap[a.invoiceId]?.invoiceNo : undefined)}>PDF</button>
+                    {canCreate && <button className="text-[11px] font-medium text-muted-foreground hover:underline" onClick={() => { setEditAdv(a); setEditAdvForm({ adviceDate: a.adviceDate.slice(0, 10), partyName: a.partyName || '', note: (a as { note?: string }).note || '' }); }}>Edit</button>}
+                    {canCreate && <button className="text-[11px] font-medium text-red-600 hover:underline" onClick={() => deleteAdvice(a)}>Delete</button>}
                   </div>
                 </td>
               </tr>
@@ -591,6 +606,26 @@ export default function PaymentAdvicesPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Edit modal */}
+      {editAdv && (
+        <div className="modal-overlay" onClick={() => setEditAdv(null)} role="dialog" aria-modal="true">
+          <div className="modal-card modal-sm" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div><span className="modal-eyebrow">Payment Advice</span><h3 className="modal-title">Edit {editAdv.adviceNo}</h3></div>
+              <button type="button" className="modal-close" onClick={() => setEditAdv(null)} aria-label="Close">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <form onSubmit={submitEditAdv} className="modal-body space-y-3">
+              <div><label className="field-label">Date</label><input type="date" className="input-field" value={editAdvForm.adviceDate} onChange={(e) => setEditAdvForm({ ...editAdvForm, adviceDate: e.target.value })} /></div>
+              <div><label className="field-label">Party Name</label><input className="input-field" value={editAdvForm.partyName} onChange={(e) => setEditAdvForm({ ...editAdvForm, partyName: e.target.value })} /></div>
+              <div><label className="field-label">Note</label><textarea className="input-field" rows={2} value={editAdvForm.note} onChange={(e) => setEditAdvForm({ ...editAdvForm, note: e.target.value })} /></div>
+              <div className="flex justify-end gap-2"><button type="button" className="secondary-button" onClick={() => setEditAdv(null)}>Cancel</button><button type="submit" className="primary-button">Save</button></div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* View modal */}
       {viewing && (

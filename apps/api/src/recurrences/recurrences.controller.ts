@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -63,5 +63,11 @@ export class RecurrencesController {
   @Permissions('recurrence.view')
   async logs(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<RecurrenceRunLog[]> {
     return this.recurrencesService.logs(user.firmId, id);
+  }
+
+  @Delete(':id')
+  @Permissions('recurrence.edit')
+  async remove(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<{ deleted: true }> {
+    return this.recurrencesService.remove(user.firmId, id);
   }
 }

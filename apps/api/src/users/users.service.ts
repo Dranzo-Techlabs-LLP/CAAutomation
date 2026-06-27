@@ -111,6 +111,21 @@ export class UsersService {
     return this.toResponse(await this.userRepository.save(user));
   }
 
+  /**
+   * "Delete" a user = deactivate (soft). Hard deletion is unsafe — users are
+   * referenced by tasks, time logs and audit rows. Deactivating revokes access
+   * and removes them from assignee pickers while preserving history. Blocks
+   * self-deactivation.
+   */
+  async deactivate(userId: string, firmId: string, actorUserId: string): Promise<UserResponseDto> {
+    if (userId === actorUserId) throw new BadRequestException('You cannot deactivate your own account.');
+    const user = await this.userRepository.findOne({ where: { id: userId, firmId } });
+    if (!user) throw new NotFoundException('User not found');
+    user.isActive = false;
+    user.updatedBy = actorUserId;
+    return this.toResponse(await this.userRepository.save(user));
+  }
+
   async updateRates(
     userId: string,
     firmId: string,

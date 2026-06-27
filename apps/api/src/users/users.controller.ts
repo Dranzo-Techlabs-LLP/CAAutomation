@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -141,5 +142,12 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
   ): Promise<UserResponseDto> {
     return this.usersService.updateUser(id, user.firmId, dto, user.id);
+  }
+
+  // "Delete" = deactivate (soft) — preserves task/time-log/audit history
+  @Delete(':id')
+  @Permissions('user.create')
+  async deactivate(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<UserResponseDto> {
+    return this.usersService.deactivate(id, user.firmId, user.id);
   }
 }
