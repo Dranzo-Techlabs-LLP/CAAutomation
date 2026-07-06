@@ -67,8 +67,14 @@ export async function api<T = unknown>(
     throw new Error(body.message || `Request failed: ${res.status}`);
   }
 
+  // Some endpoints (notably DELETE handlers returning void) reply with 200/204
+  // and an EMPTY body. Calling res.json() on that throws
+  // "Unexpected end of JSON input", so read the text first and only parse when
+  // there is actually content.
   if (res.status === 204) return undefined as T;
-  return res.json();
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 /** Download a binary file from the API and trigger a browser save dialog. */

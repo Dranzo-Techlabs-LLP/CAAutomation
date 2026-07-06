@@ -107,7 +107,10 @@ export default function CustomersPage() {
       Object.keys(payload).forEach((k) => {
         if (payload[k] === null) delete payload[k];
       });
-      await api('/customers', { method: 'POST', body: JSON.stringify(payload) });
+      const created = await api<Customer>('/customers', { method: 'POST', body: JSON.stringify(payload) });
+      // Optimistically show the new customer immediately (no wait for refetch),
+      // then reconcile with the server list.
+      setCustomers((prev) => [created, ...prev.filter((c) => c.id !== created.id)]);
       resetForm();
       load();
     } catch (err: unknown) {
@@ -140,10 +143,11 @@ export default function CustomersPage() {
     if (!editingCustomer) return;
     setError('');
     try {
-      await api(`/customers/${editingCustomer.id}`, {
+      const updated = await api<Customer>(`/customers/${editingCustomer.id}`, {
         method: 'PATCH',
         body: JSON.stringify(buildPayload()),
       });
+      setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       resetForm();
       load();
     } catch (err: unknown) {
@@ -185,6 +189,8 @@ export default function CustomersPage() {
   const handleDelete = async (id: string) => {
     try {
       await api(`/customers/${id}`, { method: 'DELETE' });
+      // Remove from view immediately, then reconcile with the server.
+      setCustomers((prev) => prev.filter((c) => c.id !== id));
       setDeleteConfirmId(null);
       load();
     } catch (err: unknown) {

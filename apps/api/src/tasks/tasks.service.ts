@@ -165,6 +165,10 @@ export class TasksService {
     return task;
   }
 
+  async getOne(firmId: string, id: string): Promise<TaskResponseDto> {
+    return this.toResponse(await this.getEntityOrFail(firmId, id));
+  }
+
   async update(firmId: string, id: string, dto: UpdateTaskDto, actorUserId: string): Promise<TaskResponseDto> {
     const task = await this.getEntityOrFail(firmId, id);
     const before = this.snapshot(task);

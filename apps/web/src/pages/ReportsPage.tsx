@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Users, Briefcase, Download, Calendar, X, Clock, CheckCircle2, Wallet, FileSpreadsheet } from 'lucide-react';
 import { api } from '../lib/api';
+import { useUiStore } from '../lib/ui-store';
 
 type ReportMode = 'staff' | 'client';
 type Preset = 'today' | 'week' | 'month' | 'lastmonth' | 'custom';
@@ -120,6 +121,7 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
 }
 
 export default function ReportsPage() {
+  const openTask = useUiStore((s) => s.openTask);
   const [mode, setMode] = useState<ReportMode>('staff');
   const [preset, setPreset] = useState<Preset>('month');
   const initial = presetWindow('month');
@@ -525,7 +527,11 @@ export default function ReportsPage() {
                         <td className="px-4 py-2 text-[12px] text-muted-foreground tabular-nums">{fmtDateTime(r.startedAt)}</td>
                         <td className="px-4 py-2 text-[12px] font-medium text-foreground">{r.userName}</td>
                         <td className="px-4 py-2 text-[12px]">{r.customerName || '-'}</td>
-                        <td className="px-4 py-2 text-[12px]">{r.taskTitle}</td>
+                        <td className="px-4 py-2 text-[12px]">
+                          {r.taskId ? (
+                            <button type="button" onClick={() => openTask(r.taskId)} className="text-left text-primary hover:underline" title="Open task">{r.taskTitle}</button>
+                          ) : r.taskTitle}
+                        </td>
                         <td className="px-4 py-2 text-[12px] text-muted-foreground">{r.serviceName || '-'}</td>
                         <td className="px-4 py-2 text-right text-[12px] font-mono tabular-nums">{fmtHrs(r.durationMinutes)}</td>
                         <td className="px-4 py-2 text-center">

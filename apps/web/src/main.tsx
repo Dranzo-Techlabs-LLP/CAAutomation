@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { api } from './lib/api';
 import { useAuth } from './lib/auth';
 import { useUiStore } from './lib/ui-store';
+import TaskDetailModal from './components/TaskDetailModal';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import CustomersPage from './pages/CustomersPage';
@@ -246,6 +247,9 @@ function AppShell() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+
+      {/* Global task-detail pop-up — openable from any page via ui-store.openTask() */}
+      <TaskDetailModal />
 
       {/* Change Password Modal */}
       {showChangePw && (

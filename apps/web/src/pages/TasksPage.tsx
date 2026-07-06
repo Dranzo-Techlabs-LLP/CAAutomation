@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -180,6 +181,27 @@ export default function TasksPage() {
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link: /tasks?task=<id> (e.g. from the global task pop-up's "Open in
+  // Tasks" button) opens that task's drawer, then clears the param so a refresh
+  // doesn't force it back open.
+  useEffect(() => {
+    const tid = searchParams.get('task');
+    if (!tid) return;
+    let cancelled = false;
+    api<Task>(`/tasks/${tid}`)
+      .then((t) => { if (!cancelled) setSelectedTask(t); })
+      .catch(() => {})
+      .finally(() => {
+        if (cancelled) return;
+        // Clone before mutating the router-owned params object.
+        const next = new URLSearchParams(searchParams);
+        next.delete('task');
+        setSearchParams(next, { replace: true });
+      });
+    return () => { cancelled = true; };
+  }, [searchParams, setSearchParams]);
 
   const load = useCallback(() => {
     setLoading(true);

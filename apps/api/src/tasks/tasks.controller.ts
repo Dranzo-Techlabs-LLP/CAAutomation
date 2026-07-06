@@ -44,6 +44,15 @@ export class TasksController {
     return this.tasksService.listAssignedToUser(user.firmId, user.id, query);
   }
 
+  // Fetch a single task by id. Declared after the static `my` route so Express
+  // doesn't capture "my" as an :id. Used by the global task-detail pop-up that
+  // can be opened from the dashboard, reports, or anywhere a task is shown.
+  @Get(':id')
+  @Permissions('task.view')
+  async getOne(@CurrentUser() user: RequestUser, @Param('id') id: string): Promise<TaskResponseDto> {
+    return this.tasksService.getOne(user.firmId, id);
+  }
+
   @Post()
   @Permissions('task.create')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateTaskDto): Promise<TaskResponseDto> {
