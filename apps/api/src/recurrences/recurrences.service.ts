@@ -5,6 +5,7 @@ import { AssignmentService } from '../assignment/assignment.service';
 import { CustomerStatus } from '../customers/customer.entity';
 import { CustomersService } from '../customers/customers.service';
 import { Task, TaskGeneratedBy, TaskPriority, TaskStatus } from '../tasks/task.entity';
+import { BulkCreateRecurrenceDto } from './dto/bulk-create-recurrence.dto';
 import { CreateRecurrenceDto } from './dto/create-recurrence.dto';
 import { UpdateRecurrenceDto } from './dto/update-recurrence.dto';
 import { RecurrenceRunLog, RecurrenceRunStatus } from './recurrence-run-log.entity';
@@ -52,6 +53,66 @@ export class RecurrencesService {
     return this.recurrenceRepository.save(recurrence);
   }
 
+  /**
+   * Set up one recurring statutory task (e.g. GSTR-1) across many parties at once.
+   * Creates one TaskRecurrence per party — reusing the existing generation engine —
+   * with per-party due-day / pattern overrides. Customers not found in the firm are
+   * skipped (reported back) so a bad id doesn't fail the whole batch.
+   */
+  async createBulk(
+    firmId: string,
+    dto: BulkCreateRecurrenceDto,
+    actorUserId: string,
+  ): Promise<{ created: TaskRecurrence[]; skipped: { customerId: string; reason: string }[] }> {
+    const created: TaskRecurrence[] = [];
+    const skipped: { customerId: string; reason: string }[] = [];
+    const startDate = new Date(dto.startDate);
+    const endDate = dto.endDate ? new Date(dto.endDate) : null;
+    const seen = new Set<string>();
+
+    for (const party of dto.parties) {
+      if (seen.has(party.customerId)) continue; // de-dupe within one request
+      seen.add(party.customerId);
+
+      let customer;
+      try {
+        customer = await this.customersService.getEntityOrFail(firmId, party.customerId);
+      } catch {
+        skipped.push({ customerId: party.customerId, reason: 'Customer not found' });
+        continue;
+      }
+
+      const dueDay = party.dueDay ?? dto.dueDay;
+      const recurrence = this.recurrenceRepository.create({
+        firmId,
+        serviceId: dto.serviceId,
+        customerId: party.customerId,
+        // Per-party name so the list stays readable when one setup fans out to many.
+        name: `${dto.name} — ${customer.name}`,
+        patternType: party.patternType ?? dto.patternType,
+        patternExpression: `day=${dueDay}`,
+        timezone: dto.timezone ?? 'Asia/Kolkata',
+        startDate,
+        endDate,
+        nextRunAt: startDate,
+        generateLeadDays: party.generateLeadDays ?? dto.generateLeadDays ?? 5,
+        preventOverlap: dto.preventOverlap ?? true,
+        // The generated TASK keeps the base name (customer is a separate field on it).
+        templateJson: dto.templateJson ?? { title: dto.name, priority: 'medium' },
+        assignmentStrategy: dto.assignmentStrategy,
+        assignmentTargetUserId: dto.assignmentTargetUserId ?? null,
+        assignmentTargetTeamId: dto.assignmentTargetTeamId ?? null,
+        assignmentTargetRoleId: dto.assignmentTargetRoleId ?? null,
+        createdByUserId: actorUserId,
+        createdBy: actorUserId,
+        updatedBy: actorUserId,
+      });
+      created.push(await this.recurrenceRepository.save(recurrence));
+    }
+
+    return { created, skipped };
+  }
+
   async list(firmId: string): Promise<TaskRecurrence[]> {
     return this.recurrenceRepository.find({ where: { firmId }, order: { nextRunAt: 'ASC' } });
   }
@@ -94,7 +155,11 @@ export class RecurrencesService {
   async runOne(firmId: string, id: string, actorUserId: string): Promise<RecurrenceRunLog> {
     const recurrence = await this.getOne(firmId, id);
     const runAt = new Date();
-    const dueDate = this.calculator.dueDateForRun(recurrence.nextRunAt, recurrence.generateLeadDays);
+    const dueDate = this.calculator.dueDateForRecurrence(
+      recurrence.nextRunAt,
+      recurrence.patternExpression,
+      recurrence.generateLeadDays,
+    );
 
     try {
       const customer = await this.customersService.getEntityOrFail(firmId, recurrence.customerId);

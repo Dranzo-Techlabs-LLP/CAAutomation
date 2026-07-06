@@ -24,6 +24,21 @@ interface RunLog {
   errorMessage?: string;
 }
 
+interface StatutoryTemplate {
+  code: string;
+  name: string;
+  serviceCode: string;
+  patternType: string;
+  patternExpression: string;
+  generateLeadDays: number;
+  description: string;
+}
+
+interface BulkResult {
+  created: { id: string }[];
+  skipped: { customerId: string; reason: string }[];
+}
+
 const PATTERN_TYPES = ['weekly', 'monthly', 'quarterly', 'yearly', 'custom_cron'];
 const STRATEGIES = ['specific_user', 'team_round_robin', 'team_least_loaded', 'customer_owner', 'service_default', 'role_round_robin'];
 
@@ -44,6 +59,20 @@ export default function RecurrencesPage() {
   });
   const [error, setError] = useState('');
 
+  // ── Bulk (multi-party) statutory setup ──
+  const [templates, setTemplates] = useState<StatutoryTemplate[]>([]);
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkForm, setBulkForm] = useState({
+    templateCode: '', name: '', serviceId: '', patternType: 'monthly', dueDay: 11,
+    startDate: '', assignmentStrategy: 'team_least_loaded', generateLeadDays: 5,
+  });
+  // customerId -> per-party due day (presence in the map = selected)
+  const [selectedParties, setSelectedParties] = useState<Record<string, number>>({});
+  const [partySearch, setPartySearch] = useState('');
+  const [bulkError, setBulkError] = useState('');
+  const [bulkResult, setBulkResult] = useState<BulkResult | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
   const load = () => api<Recurrence[]>('/recurrences').then(setRecurrences).catch(() => {});
   const deleteRecurrence = async (id: string, name: string) => {
     if (!window.confirm(`Delete recurrence "${name}"? Already-generated tasks are kept; no new ones will be created.`)) return;
@@ -55,7 +84,75 @@ export default function RecurrencesPage() {
     load();
     api<{ id: string; name: string }[]>('/customers').then(setCustomers).catch(() => {});
     api<{ id: string; name: string; code: string }[]>('/services-catalog').then(setServices).catch(() => {});
+    api<StatutoryTemplate[]>('/recurrences/templates/statutory').then(setTemplates).catch(() => {});
   }, []);
+
+  // Picking a statutory template (e.g. GSTR-1) prefills service, pattern, due day.
+  const pickTemplate = (code: string) => {
+    const t = templates.find((x) => x.code === code);
+    if (!t) { setBulkForm((f) => ({ ...f, templateCode: '' })); return; }
+    const m = /day=(\d{1,2})/.exec(t.patternExpression);
+    // Firms name services descriptively (e.g. "GSTR-1 Filing") rather than by the
+    // template's serviceCode ("GSTR1"), so match on a normalised code/name too.
+    const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const codeN = norm(t.serviceCode);
+    const svc = services.find((s) => norm(s.code) === codeN)
+      || services.find((s) => codeN.length >= 3 && norm(s.name).includes(codeN))
+      || services.find((s) => codeN.length >= 3 && norm(s.code).includes(codeN));
+    setBulkForm((f) => ({
+      ...f,
+      templateCode: code,
+      name: t.name,
+      patternType: t.patternType,
+      dueDay: m ? Number(m[1]) : f.dueDay,
+      generateLeadDays: t.generateLeadDays,
+      serviceId: svc ? svc.id : f.serviceId,
+    }));
+  };
+
+  const toggleParty = (id: string) => {
+    setSelectedParties((prev) => {
+      const next = { ...prev };
+      if (id in next) delete next[id];
+      else next[id] = bulkForm.dueDay;
+      return next;
+    });
+  };
+  const setPartyDueDay = (id: string, day: number) => setSelectedParties((prev) => ({ ...prev, [id]: day }));
+
+  const handleBulkCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBulkError('');
+    setBulkResult(null);
+    const parties = Object.entries(selectedParties).map(([customerId, dueDay]) => ({ customerId, dueDay }));
+    if (!bulkForm.serviceId) { setBulkError('Select a service (or pick a template).'); return; }
+    if (!bulkForm.startDate) { setBulkError('Pick a start date.'); return; }
+    if (parties.length === 0) { setBulkError('Select at least one party.'); return; }
+    setBulkBusy(true);
+    try {
+      const res = await api<BulkResult>('/recurrences/bulk', {
+        method: 'POST',
+        body: JSON.stringify({
+          serviceId: bulkForm.serviceId,
+          name: bulkForm.name || 'Recurring task',
+          patternType: bulkForm.patternType,
+          dueDay: bulkForm.dueDay,
+          startDate: new Date(bulkForm.startDate).toISOString(),
+          generateLeadDays: bulkForm.generateLeadDays,
+          assignmentStrategy: bulkForm.assignmentStrategy,
+          templateJson: { title: bulkForm.name || 'Recurring task', priority: 'medium' },
+          parties,
+        }),
+      });
+      setBulkResult(res);
+      setSelectedParties({});
+      load();
+    } catch (err: unknown) {
+      setBulkError(err instanceof Error ? err.message : 'Failed to create');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,15 +196,22 @@ export default function RecurrencesPage() {
 
   const customerMap = Object.fromEntries(customers.map((c) => [c.id, c.name]));
   const serviceMap = Object.fromEntries(services.map((s) => [s.id, s.name]));
+  const filteredCustomers = customers.filter((c) => c.name.toLowerCase().includes(partySearch.trim().toLowerCase()));
+  const selectedCount = Object.keys(selectedParties).length;
 
   return (
     <section className="space-y-4 p-4 lg:p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-semibold">Recurrences</h2>
         {canCreate && (
-          <button className="primary-button" onClick={() => setShowForm(!showForm)}>
-            {showForm ? 'Cancel' : 'Create Recurrence'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="secondary-button text-sm" onClick={() => { setShowBulk((v) => !v); setShowForm(false); setBulkResult(null); setBulkError(''); }}>
+              {showBulk ? 'Cancel' : 'Bulk Setup (Statutory)'}
+            </button>
+            <button className="primary-button" onClick={() => { setShowForm(!showForm); setShowBulk(false); }}>
+              {showForm ? 'Cancel' : 'Create Recurrence'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -159,6 +263,129 @@ export default function RecurrencesPage() {
             </div>
           </div>
           <button type="submit" className="primary-button">Create</button>
+        </form>
+      )}
+
+      {showBulk && (
+        <form onSubmit={handleBulkCreate} className="panel space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="panel-title mb-0">Bulk Setup — one recurring task across many parties</div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Pick a statutory task (e.g. GSTR-1), select the parties, set a due day per party, and create one recurring task for each — all at once.
+          </p>
+          {bulkError && <p className="text-sm text-red-600">{bulkError}</p>}
+          {bulkResult && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+              Created <b>{bulkResult.created.length}</b> recurring task(s)
+              {bulkResult.skipped.length > 0 && <> · <span className="text-amber-700 dark:text-amber-300">{bulkResult.skipped.length} skipped</span></>}.
+            </div>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Statutory Template</label>
+              <select className="input-field" value={bulkForm.templateCode} onChange={(e) => pickTemplate(e.target.value)}>
+                <option value="">— Custom / none —</option>
+                {templates.map((t) => <option key={t.code} value={t.code}>{t.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Name</label>
+              <input className="input-field" value={bulkForm.name} onChange={(e) => setBulkForm({ ...bulkForm, name: e.target.value })} placeholder="e.g. GSTR-1 Monthly" required />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Service</label>
+              <select className="input-field" value={bulkForm.serviceId} onChange={(e) => setBulkForm({ ...bulkForm, serviceId: e.target.value })} required>
+                <option value="">Select...</option>
+                {services.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Pattern</label>
+              <select className="input-field" value={bulkForm.patternType} onChange={(e) => setBulkForm({ ...bulkForm, patternType: e.target.value })}>
+                {PATTERN_TYPES.map((p) => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Default Due Day (of month)</label>
+              <input type="number" min={1} max={31} className="input-field" value={bulkForm.dueDay} onChange={(e) => setBulkForm({ ...bulkForm, dueDay: Number(e.target.value) })} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Start Date</label>
+              <input type="date" className="input-field" value={bulkForm.startDate} onChange={(e) => setBulkForm({ ...bulkForm, startDate: e.target.value })} required />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Assignment</label>
+              <select className="input-field" value={bulkForm.assignmentStrategy} onChange={(e) => setBulkForm({ ...bulkForm, assignmentStrategy: e.target.value })}>
+                {STRATEGIES.map((s) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Generate Lead Days</label>
+              <input type="number" min={0} className="input-field" value={bulkForm.generateLeadDays} onChange={(e) => setBulkForm({ ...bulkForm, generateLeadDays: Number(e.target.value) })} />
+            </div>
+          </div>
+
+          {/* Party multi-select */}
+          <div className="rounded-lg border border-border">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-2">
+              <div className="flex items-center gap-2">
+                <input
+                  className="input-field h-8 py-1 text-sm"
+                  placeholder="Search parties…"
+                  value={partySearch}
+                  onChange={(e) => setPartySearch(e.target.value)}
+                />
+                <span className="text-xs text-muted-foreground">{selectedCount} selected</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => setSelectedParties((prev) => {
+                    const next = { ...prev };
+                    filteredCustomers.forEach((c) => { if (!(c.id in next)) next[c.id] = bulkForm.dueDay; });
+                    return next;
+                  })}
+                >
+                  Select all{partySearch ? ' (filtered)' : ''}
+                </button>
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelectedParties({})}>Clear</button>
+              </div>
+            </div>
+            <div className="max-h-64 space-y-0.5 overflow-y-auto p-2">
+              {filteredCustomers.length === 0 && <p className="py-4 text-center text-xs text-muted-foreground">No parties</p>}
+              {filteredCustomers.map((c) => {
+                const selected = c.id in selectedParties;
+                return (
+                  <div key={c.id} className={`flex items-center justify-between gap-2 rounded-md px-2 py-1.5 ${selected ? 'bg-accent/50' : ''}`}>
+                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-sm">
+                      <input type="checkbox" checked={selected} onChange={() => toggleParty(c.id)} className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{c.name}</span>
+                    </label>
+                    {selected && (
+                      <label className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+                        Due day
+                        <input
+                          type="number"
+                          min={1}
+                          max={31}
+                          value={selectedParties[c.id]}
+                          onChange={(e) => setPartyDueDay(c.id, Number(e.target.value))}
+                          className="input-field h-7 w-16 py-0 text-sm"
+                        />
+                      </label>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <button type="submit" className="primary-button" disabled={bulkBusy}>
+            {bulkBusy ? 'Creating…' : `Create for ${selectedCount || 0} part${selectedCount === 1 ? 'y' : 'ies'}`}
+          </button>
         </form>
       )}
 

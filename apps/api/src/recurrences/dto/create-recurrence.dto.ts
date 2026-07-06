@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsISO8601, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsBoolean, IsEnum, IsISO8601, IsInt, IsObject, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 import { AssignmentStrategy, RecurrencePatternType } from '../task-recurrence.entity';
 
 export class CreateRecurrenceDto {
@@ -49,6 +49,7 @@ export class CreateRecurrenceDto {
   preventOverlap?: boolean;
 
   @ApiProperty()
+  @IsObject()
   templateJson!: Record<string, unknown>;
 
   @ApiPropertyOptional()

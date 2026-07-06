@@ -6,6 +6,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequestUser } from '../common/types/request-user';
 import { statutoryRecurrenceTemplates } from '../seeds/statutory-recurrence-templates';
+import { BulkCreateRecurrenceDto } from './dto/bulk-create-recurrence.dto';
 import { CreateRecurrenceDto } from './dto/create-recurrence.dto';
 import { UpdateRecurrenceDto } from './dto/update-recurrence.dto';
 import { RecurrenceRunLog } from './recurrence-run-log.entity';
@@ -35,6 +36,13 @@ export class RecurrencesController {
   @Permissions('recurrence.create')
   async create(@CurrentUser() user: RequestUser, @Body() dto: CreateRecurrenceDto): Promise<TaskRecurrence> {
     return this.recurrencesService.create(user.firmId, dto, user.id);
+  }
+
+  // Set up one recurring statutory task across many parties in a single action.
+  @Post('bulk')
+  @Permissions('recurrence.create')
+  async createBulk(@CurrentUser() user: RequestUser, @Body() dto: BulkCreateRecurrenceDto) {
+    return this.recurrencesService.createBulk(user.firmId, dto, user.id);
   }
 
   @Post('preview')
