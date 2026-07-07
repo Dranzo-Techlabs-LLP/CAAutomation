@@ -4,21 +4,18 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { SchedulerStatusService } from './scheduler-status.service';
-import { SchedulerService } from './scheduler.service';
 
 @ApiTags('Scheduler')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('admin/scheduler')
 export class SchedulerController {
-  constructor(
-    private readonly scheduler: SchedulerService,
-    private readonly status: SchedulerStatusService,
-  ) {}
+  constructor(private readonly status: SchedulerStatusService) {}
 
   @Get('status')
   @Permissions('scheduler.view')
-  async getStatus() {
-    return this.status.snapshot(await this.scheduler.depth());
+  getStatus() {
+    // In-process timer scheduler — no external queue, so depth is always 0.
+    return this.status.snapshot(0);
   }
 }

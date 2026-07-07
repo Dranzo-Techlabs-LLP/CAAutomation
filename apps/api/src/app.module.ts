@@ -1,4 +1,3 @@
-import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -120,20 +119,6 @@ import { WorkflowsModule } from './workflows/workflows.module';
         logging: config.get<string>('NODE_ENV') === 'development' ? ['error', 'warn'] : ['error'],
       }),
     }),
-    ...(process.env.DISABLE_SCHEDULER === 'true'
-      ? []
-      : [
-          BullModule.forRootAsync({
-            inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-              connection: {
-                host: config.get<string>('REDIS_HOST') ?? 'localhost',
-                port: Number(config.get<string>('REDIS_PORT') ?? 6379),
-                password: config.get<string>('REDIS_PASSWORD') || undefined,
-              },
-            }),
-          }),
-        ]),
     AuthModule,
     UsersModule,
     RolesModule,
@@ -150,7 +135,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     WorkflowsModule,
     AssignmentModule,
     RecurrencesModule,
-    ...(process.env.DISABLE_SCHEDULER === 'true' ? [] : [SchedulerModule]),
+    SchedulerModule,
     BillingModule,
     DashboardsModule,
     IntegrationsModule,

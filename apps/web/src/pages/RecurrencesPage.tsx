@@ -37,6 +37,7 @@ interface StatutoryTemplate {
 interface BulkResult {
   created: { id: string }[];
   skipped: { customerId: string; reason: string }[];
+  generatedTaskCount: number;
 }
 
 const PATTERN_TYPES = ['weekly', 'monthly', 'quarterly', 'yearly', 'custom_cron'];
@@ -277,7 +278,7 @@ export default function RecurrencesPage() {
           {bulkError && <p className="text-sm text-red-600">{bulkError}</p>}
           {bulkResult && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-              Created <b>{bulkResult.created.length}</b> recurring task(s)
+              Created <b>{bulkResult.created.length}</b> recurring setup(s) · <b>{bulkResult.generatedTaskCount}</b> task(s) added to Tasks now
               {bulkResult.skipped.length > 0 && <> · <span className="text-amber-700 dark:text-amber-300">{bulkResult.skipped.length} skipped</span></>}.
             </div>
           )}

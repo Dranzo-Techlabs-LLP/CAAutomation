@@ -50,7 +50,26 @@ export class RecurrencesService {
       createdBy: actorUserId,
       updatedBy: actorUserId,
     });
-    return this.recurrenceRepository.save(recurrence);
+    const saved = await this.recurrenceRepository.save(recurrence);
+    // Generate the first task right away if it's already due, so the user sees it
+    // immediately instead of waiting for the periodic scheduler.
+    await this.maybeGenerateNow(saved, actorUserId);
+    return this.getOne(firmId, saved.id);
+  }
+
+  /**
+   * If the recurrence is already due (start date today or in the past), generate its
+   * first task immediately. Returns true when a task was created. Never throws — a
+   * generation hiccup must not fail the create.
+   */
+  private async maybeGenerateNow(recurrence: TaskRecurrence, actorUserId: string): Promise<boolean> {
+    if (recurrence.nextRunAt.getTime() > Date.now()) return false;
+    try {
+      const log = await this.runOne(recurrence.firmId, recurrence.id, actorUserId);
+      return log.status === RecurrenceRunStatus.Success;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -63,9 +82,10 @@ export class RecurrencesService {
     firmId: string,
     dto: BulkCreateRecurrenceDto,
     actorUserId: string,
-  ): Promise<{ created: TaskRecurrence[]; skipped: { customerId: string; reason: string }[] }> {
+  ): Promise<{ created: TaskRecurrence[]; skipped: { customerId: string; reason: string }[]; generatedTaskCount: number }> {
     const created: TaskRecurrence[] = [];
     const skipped: { customerId: string; reason: string }[] = [];
+    let generatedTaskCount = 0;
     const startDate = new Date(dto.startDate);
     const endDate = dto.endDate ? new Date(dto.endDate) : null;
     const seen = new Set<string>();
@@ -107,10 +127,13 @@ export class RecurrencesService {
         createdBy: actorUserId,
         updatedBy: actorUserId,
       });
-      created.push(await this.recurrenceRepository.save(recurrence));
+      const savedRec = await this.recurrenceRepository.save(recurrence);
+      created.push(savedRec);
+      // Generate this party's first task now if already due.
+      if (await this.maybeGenerateNow(savedRec, actorUserId)) generatedTaskCount += 1;
     }
 
-    return { created, skipped };
+    return { created, skipped, generatedTaskCount };
   }
 
   async list(firmId: string): Promise<TaskRecurrence[]> {
