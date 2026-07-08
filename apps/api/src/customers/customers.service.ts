@@ -30,10 +30,16 @@ export class CustomersService {
   }
 
   async list(firmId: string): Promise<CustomerResponseDto[]> {
+    // Return the firm's FULL customer list — this feeds every customer dropdown
+    // (task creation, invoices, advices, recurrences…) and the id→name maps used
+    // to label existing records. The previous take:100 (updatedAt DESC) silently
+    // hid older clients from those pickers and made old tasks show a blank
+    // customer even though the record still existed. Customer counts per firm are
+    // bounded; the high ceiling is just a runaway guard.
     const customers = await this.customerRepository.find({
       where: { firmId },
-      order: { updatedAt: 'DESC' },
-      take: 100,
+      order: { name: 'ASC' },
+      take: 5000,
     });
     return customers.map((customer) => this.toResponse(customer));
   }
